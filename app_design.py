@@ -600,4 +600,4 @@ if __name__ == "__main__":
         print(f"Memory: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
     print("="*70)
     
-    demo.launch(share=False)
+    demo.launch(share=True)
