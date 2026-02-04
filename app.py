@@ -34,14 +34,15 @@ def load_sdxl_with_lora():
     if sdxl_pipe is not None:
         return "✅ SDXL already loaded"
     
-    from diffusers import DiffusionPipeline
+    from diffusers import StableDiffusionXLPipeline
     
     yield "📥 Downloading SDXL base model..."
-    pipe = DiffusionPipeline.from_pretrained(
+    pipe = StableDiffusionXLPipeline.from_pretrained(
         "stabilityai/stable-diffusion-xl-base-1.0",
         torch_dtype=torch.float16,
         use_safetensors=True,
-        variant="fp16"
+        variant="fp16",
+        add_watermarker=False
     )
     
     yield "📥 Downloading LoRA weights from Hugging Face..."
@@ -50,7 +51,16 @@ def load_sdxl_with_lora():
     
     yield "🔧 Moving to GPU..."
     pipe = pipe.to(device)
-    pipe.enable_attention_slicing()
+    
+    # Memory optimizations
+    pipe.enable_attention_slicing(1)
+    pipe.enable_vae_slicing()
+    pipe.enable_vae_tiling()
+    
+    try:
+        pipe.enable_xformers_memory_efficient_attention()
+    except:
+        pass
     
     sdxl_pipe = pipe
     
@@ -73,9 +83,14 @@ class SatellitePromptGenerator:
         self.model = AutoModelForCausalLM.from_pretrained(
             "Qwen/Qwen2.5-3B-Instruct",
             torch_dtype=torch.float16,
-            device_map="auto"
+            device_map="auto",
+            trust_remote_code=True,
+            low_cpu_mem_usage=True
         )
-        self.tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-3B-Instruct")
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            "Qwen/Qwen2.5-3B-Instruct",
+            trust_remote_code=True
+        )
     
     def unload(self):
         """Free memory"""
@@ -154,13 +169,16 @@ Generate description:"""
         generated = self.tokenizer.decode(output[0], skip_special_tokens=True)
         
         # Extract description
-        parts = generated.split("Generate description:") if "Generate description:" in generated else generated.split("Generate ONE description:")
+        parts = generated.split("Generate description:")
         if len(parts) > 1:
             description = parts[-1].strip()
         else:
             description = generated.split('\n')[-1].strip()
         
-        return description.replace('"', '').strip()
+        # Clean up
+        description = description.replace('"', '').replace("'", "").strip()
+        
+        return description
     
     def generate_prompts(self, feature_dict, num_prompts, scene_type, density_bias):
         """Generate prompts one by one"""
@@ -243,7 +261,9 @@ def generate_dataset(
             density_bias=density
         )
         
-        yield f"✅ Generated {len(prompts)} prompts", ""
+        # Show sample prompts
+        sample_text = "\n".join([f"  {i+1}. {p[:70]}..." for i, p in enumerate(prompts[:3])])
+        yield f"✅ Generated {len(prompts)} prompts\n\nSample prompts:\n{sample_text}", ""
         
         # ====================================================================
         # STEP 3: UNLOAD QWEN
@@ -319,12 +339,12 @@ def generate_dataset(
                 del result, img
                 torch.cuda.empty_cache()
                 
-                # Update progress
-                progress_text = f"🎨 Generating images: {successful}/{len(prompts)} complete"
-                if failed > 0:
-                    progress_text += f" ({failed} failed)"
-                
-                yield progress_text, ""
+                # Update progress every 5 images or at the end
+                if (successful % 5 == 0) or (successful == len(prompts)):
+                    progress_text = f"🎨 Generating images: {successful}/{len(prompts)} complete"
+                    if failed > 0:
+                        progress_text += f" ({failed} failed)"
+                    yield progress_text, ""
                 
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
@@ -520,7 +540,7 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             
             with gr.Row():
                 count = gr.Number(label="Images", value=10, minimum=1, maximum=100, precision=0)
-                steps = gr.Number(label="Steps", value=25, minimum=20, maximum=50, precision=0)
+                steps = gr.Number(label="Steps", value=30, minimum=20, maximum=50, precision=0)
             
             with gr.Row():
                 guidance = gr.Number(label="Guidance", value=7.5, minimum=5.0, maximum=15.0)
@@ -554,8 +574,9 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
     # Status display
     status_box = gr.Textbox(
         label="Status",
-        lines=8,
-        value="Ready to generate. Click 'Generate Dataset' to begin."
+        lines=10,
+        value="Ready to generate. Click 'Generate Dataset' to begin.",
+        interactive=False
     )
     
     path_box = gr.Textbox(label="Output Path", lines=1, interactive=False)
