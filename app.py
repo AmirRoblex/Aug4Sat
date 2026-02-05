@@ -123,38 +123,60 @@ class TemplateVariantGenerator:
         self.templates = {
             'rural-sparse': [
                 # Pattern: Scene + feature. Infrastructure. Vegetation/terrain.
-                "{scene} with {buildings}{water_s1}. {roads} {road_action} the area. {veg_terrain}",
-                "{scene} with {density} and {buildings}{water_s1}. {roads} visible throughout terrain. {veg_terrain}",
-                "Arid landscape with {buildings} and {roads_lower}{water_s1}. {veg_terrain} Minimal development with scattered structures.",
-                "{scene} with {buildings} connected by {roads_lower}{water_s1}. {veg_terrain} {density} throughout rural zone.",
+                "{scene} with {density} and {buildings}{water_s1}. {roads} {road_action} the {building_location}, {road_detail}. {veg_terrain}{spatial_closure}",
+                "{scene} with {density}, featuring {buildings}{water_s1}. {roads} visible throughout terrain, {road_detail}. {veg_terrain}{spatial_closure}",
+                "Arid landscape with {buildings} and {roads_lower}{water_s1}. {veg_terrain} {closure_phrase}{spatial_closure}",
+                "{scene} with {buildings} connected by {roads_lower}{water_s1}. {veg_terrain} {density} throughout rural zone{spatial_closure}",
             ],
             'urban-moderate': [
                 # Pattern: Scene + development. Roads/buildings. Vegetation/terrain.
-                "{scene} with {density} featuring {buildings}{water_s1}. {roads} creating grid pattern. {veg_terrain}",
-                "{scene} with {density} and {buildings}{water_s1}. {roads} visible throughout area. Mixed {terrain} and {veg_lower}.",
-                "Urban area with {buildings} and {density}{water_s1}. {roads} {road_action} residential zone. {veg_terrain}",
-                "{scene} with {density}{water_s1}. {buildings} and {roads_lower} throughout settlement. {veg_terrain}",
+                "{scene} with {density} featuring {buildings}{water_s1}. {roads} creating grid pattern, {road_detail}. {veg_terrain}{spatial_closure}",
+                "{scene} with {density} and {buildings}{water_s1}. {roads} visible throughout area, {road_detail}. Mixed {terrain} and {veg_lower}{spatial_closure}",
+                "Urban area with {buildings} and {density}{water_s1}. {roads} {road_action} residential zone, {road_detail}. {veg_terrain}{spatial_closure}",
+                "{scene} with {density}{water_s1}. {buildings} and {roads_lower} throughout settlement, {road_detail}. {veg_terrain}{spatial_closure}",
             ],
             'coastal': [
                 # Pattern: Coastal scene with water. Buildings/roads along shoreline. Vegetation.
-                "Coastal scene with water body adjacent to {shoreline_desc}. {buildings} and {roads_lower} visible along shoreline. {veg_terrain_coastal}",
-                "Coastal scene with water body along developed {shore_position}. {density} with {buildings} near water. {roads} visible throughout area. {veg_terrain_coastal}",
-                "Coastal urban settlement adjacent to water body. {buildings} and {roads_lower} along {shore_position}. {veg_terrain_coastal}",
-                "Coastal scene with water body {water_position} urban area. {density} featuring {buildings}. {roads} visible along coast. {veg_terrain_coastal}",
+                "Coastal scene with water body adjacent to {shoreline_desc}. {buildings} and {roads_lower} visible along shoreline, {road_detail}. {veg_terrain}",
+                "Coastal scene with water body along developed {shore_position}. {density} with {buildings} near water, {road_detail}. {roads} visible throughout area. {veg_terrain}",
+                "Coastal urban settlement adjacent to water body. {buildings} and {roads_lower} along {shore_position}, {road_detail}. {veg_terrain}",
+                "Coastal scene with water body {water_position} {shoreline_desc}. {density} featuring {buildings}, {road_detail}. {roads} visible along coast. {veg_terrain}",
             ]
         }
     
 
     def _substitute(self, text):
-        """Replace phrases with synonyms for diversity"""
+        """Replace phrases with synonyms for diversity (avoiding duplicate substitutions)"""
+        import re
         phrases = sorted(self.synonyms.keys(), key=len, reverse=True)
         
+        # Track what we've already replaced to avoid duplicates
+        already_replaced = set()
+        
         for phrase in phrases:
+            # Skip if we already replaced a phrase that contains this one
+            if any(phrase in existing for existing in already_replaced):
+                continue
+            
             if phrase in text:
                 replacement = random.choice(self.synonyms[phrase])
-                text = text.replace(phrase, replacement, 1)
+                # Only replace if not creating duplicate words
+                test_text = text.replace(phrase, replacement, 1)
+                # Check for duplicate words (e.g., "coverage coverage")
+                words = test_text.split()
+                if len(words) != len(set(words)):
+                    continue  # Skip this replacement if it creates duplicates
+                text = test_text
+                already_replaced.add(phrase)
         
-        return text
+        # Clean up any remaining duplicate words
+        words = text.split()
+        cleaned_words = []
+        for i, word in enumerate(words):
+            if i == 0 or word != words[i-1]:
+                cleaned_words.append(word)
+        
+        return ' '.join(cleaned_words)
     
     def _get_scene_type(self, scene, has_coastal_water):
         """Determine scene template type"""
@@ -202,9 +224,40 @@ class TemplateVariantGenerator:
     def _build_road_action(self, paved):
         """Get road action verb"""
         if paved:
-            return random.choice(self.synonyms['form a grid'])
+            actions = ['form a grid throughout', 'form a grid-like network in', 'form a loose grid in', 'create a grid pattern in']
+            return random.choice(actions)
         else:
-            return random.choice(self.synonyms['connect'])
+            actions = ['connect', 'link', 'traverse', 'cross']
+            return random.choice(actions)
+    
+    def _build_road_detail(self):
+        """Build road detail phrases for added description"""
+        details = [
+            "connecting the dispersed structures",
+            "forming irregular pathways",
+            "interspersed throughout the scene",
+            "dividing the terrain into irregular plots",
+            "traversing the landscape",
+            "winding through the area",
+            "cutting through the scene",
+            "running through the terrain",
+            "connecting scattered clusters",
+            "forming a loose grid pattern"
+        ]
+        return random.choice(details)
+    
+    def _build_spatial_closure(self, density):
+        """Build closure phrase with spatial detail"""
+        if density == 'low':
+            closures = [
+                " Minimal development with scattered structures.",
+                " Development is minimal and dispersed.",
+                " Development is sparse and dispersed across the terrain.",
+                ""
+            ]
+        else:
+            closures = ["", ""]  # Less closure needed for higher density
+        return random.choice(closures)
     
     def _build_vegetation_phrase(self, veg_level):
         """Build vegetation description"""
@@ -235,7 +288,7 @@ class TemplateVariantGenerator:
         else:
             return random.choice(self.synonyms['bare, sandy terrain'])
     
-    def _build_water_components(self, has_coastal, has_small):
+    def _build_water_components(self, has_coastal):
         """Build water-related phrases - integrated into FIRST sentence"""
         if has_coastal:
             return {
@@ -243,14 +296,7 @@ class TemplateVariantGenerator:
                 'shoreline_desc': 'developed shoreline',
                 'shore_position': random.choice(self.synonyms['shoreline']),
                 'water_s1': '',  # Coastal templates already have "with water body"
-            }
-        elif has_small:
-            # Small water goes in sentence 1 as scene-defining feature
-            return {
-                'water_s1': ' with water body visible',
-                'water_position': '',
-                'shoreline_desc': '',
-                'shore_position': '',
+                'spatial_closure': ''
             }
         else:
             return {
@@ -258,6 +304,7 @@ class TemplateVariantGenerator:
                 'water_position': '',
                 'shoreline_desc': '',
                 'shore_position': '',
+                'spatial_closure': ''
             }
     
     def _build_veg_terrain_phrase(self, veg_level, is_coastal=False):
@@ -287,32 +334,6 @@ class TemplateVariantGenerator:
                 return f"Minimal vegetation on {random.choice(self.synonyms['predominantly bareland'])}"
     
     def generate(self, features):
-        """Generate diverse prompts using actual training data vocabulary
-        
-        Args:
-            features: dict with keys:
-                - scene: 'rural' or 'urban'
-                - density: 'low', 'moderate', 'high'
-                - coastal_water: bool
-                - small_water: bool
-                - veg_level: 'sparse', 'moderate', 'dense', or None
-                - paved_roads: bool
-                - unpaved_roads: bool
-        """
-        # Determine template type
-        scene_type = self._get_scene_type(features['scene'], features.get('coastal_water', False))
-        
-        # Select random template from the scene type
-        template = random.choice(self.templates[scene_type])
-        
-        # Build all components using training data phrases
-        scene = self._build_scene_phrase(features['scene'])
-        density = self._build_density_phrase(features.get('density', 'moderate'))
-        buildings = self._build_buildings_phrase(features.get('density', 'moderate'))
-        roads = self._build_roads_phrase(features.get('paved_roads', False), features.get('unpaved_roads', False))
-        road_action = self._build_road_action(features.get('paved_roads', False))
-        vegetation = self._build_vegetation_phrase(features.get('veg_level'))
-    def generate(self, features):
         """Generate diverse prompts using actual training data structure (2-3 sentences)
         
         Args:
@@ -320,7 +341,6 @@ class TemplateVariantGenerator:
                 - scene: 'rural' or 'urban'
                 - density: 'low', 'moderate', 'high'
                 - coastal_water: bool
-                - small_water: bool
                 - veg_level: 'sparse', 'moderate', 'dense', or None
                 - paved_roads: bool
                 - unpaved_roads: bool
@@ -339,17 +359,23 @@ class TemplateVariantGenerator:
         roads = self._build_roads_phrase(features.get('paved_roads', False), features.get('unpaved_roads', False))
         roads_lower = roads.lower()
         road_action = self._build_road_action(features.get('paved_roads', False))
+        road_detail = self._build_road_detail()
         veg_lower = self._build_vegetation_phrase(features.get('veg_level')).lower()
         terrain = self._build_terrain_phrase(features.get('veg_level'))
+        building_location = random.choice(['structures', 'buildings', 'settlements', 'dispersed dwellings', 'residential clusters'])
+        closure_phrase = random.choice([
+            'Minimal development with scattered structures',
+            'Development is minimal and dispersed',
+            'Development is sparse and dispersed across the terrain',
+            'indicating a dry environment'
+        ])
         
         # Build combined vegetation + terrain phrase (sentence 3)
         veg_terrain = self._build_veg_terrain_phrase(features.get('veg_level'), is_coastal)
-        veg_terrain_coastal = veg_terrain  # Same for coastal
         
         # Water components (integrated into sentence 1)
         water_components = self._build_water_components(
-            features.get('coastal_water', False),
-            features.get('small_water', False)
+            features.get('coastal_water', False)
         )
         
         # Fill template with all components
@@ -360,10 +386,12 @@ class TemplateVariantGenerator:
             roads=roads,
             roads_lower=roads_lower,
             road_action=road_action,
+            road_detail=road_detail,
             veg_lower=veg_lower,
             terrain=terrain,
             veg_terrain=veg_terrain,
-            veg_terrain_coastal=veg_terrain_coastal,
+            building_location=building_location,
+            closure_phrase=closure_phrase,
             **water_components
         )
         
@@ -378,7 +406,7 @@ class TemplateVariantGenerator:
 
 def generate_dataset(
     # Water features
-    coastal, small_water,
+    coastal,
     # Vegetation features (simplified to match training data)
     veg_sparse, veg_moderate, veg_dense,
     # Road features
@@ -386,7 +414,7 @@ def generate_dataset(
     # Building features
     residential, commercial, industrial,
     # Generation settings
-    count, scene, density, steps, guidance, width, height, seed, neg_prompt
+    count, scene, density, steps, guidance, height, seed, neg_prompt
 ):
     """Main generation function - yields status updates"""
     
@@ -424,7 +452,6 @@ def generate_dataset(
             'scene': scene,
             'density': density,
             'coastal_water': coastal,
-            'small_water': small_water,
             'veg_level': veg_level,
             'paved_roads': paved,
             'unpaved_roads': unpaved or highways  # highways are paved roads
@@ -463,7 +490,7 @@ def generate_dataset(
                 "density_bias": density,
                 "steps": int(steps),
                 "guidance": float(guidance),
-                "resolution": f"{int(width)}x{int(height)}",
+                "resolution": f"{int(height)}x{int(height)}",
                 "seed": seed if seed else "random",
                 "negative_prompt": neg_prompt,
                 "timestamp": timestamp
@@ -486,7 +513,7 @@ def generate_dataset(
                     negative_prompt=neg_prompt,
                     num_inference_steps=int(steps),
                     guidance_scale=float(guidance),
-                    width=int(width),
+                    width=int(height),  # Use height for both (square images)
                     height=int(height),
                     generator=torch.manual_seed(base_seed + i)
                 )
@@ -530,28 +557,28 @@ def generate_dataset(
         # FINAL STATUS
         # ====================================================================
         
-        final_status = f"""✅ GENERATION COMPLETE!
+        final_status = f"""Generation Complete!
 
-📊 Summary:
-  • Generated: {successful}/{len(prompts)} images
-  • Failed: {failed}
-  • Resolution: {width}x{height} px
-  • Steps: {steps} | Guidance: {guidance}
+Summary:
+  - Generated: {successful}/{len(prompts)} images
+  - Failed: {failed}
+  - Resolution: {height}x{height} px
+  - Steps: {steps} | Guidance: {guidance}
 
-📁 Output Directory:
+Output Directory:
   {exp_dir}
 
-📝 Files:
-  • {successful} images in /images/
-  • prompts.txt (all prompts)
-  • metadata.json (full config)
+Files:
+  - {successful} images in /images/
+  - prompts.txt (all prompts)
+  - metadata.json (full config)
 
 You can now download the entire folder or individual images."""
         
         yield final_status, exp_dir
         
     except Exception as e:
-        error_msg = f"""❌ ERROR OCCURRED:
+        error_msg = f"""ERROR OCCURRED:
 
 {str(e)}
 
@@ -677,7 +704,6 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             gr.Markdown("### Water Bodies")
             with gr.Group():
                 coastal = gr.Checkbox(label="Coastal Water", value=True)
-                small_water = gr.Checkbox(label="Small Water Bodies (ponds/channels)")
                 # Hidden - not in training data
                 rivers = gr.Checkbox(visible=False)
                 lakes = gr.Checkbox(visible=False)
@@ -731,9 +757,7 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 label="Building Density"
             )
             
-            with gr.Row():
-                width = gr.Radio([768, 1024], value=1024, label="Width")
-                height = gr.Radio([768, 1024], value=1024, label="Height")
+            height = gr.Radio([768, 1024], value=1024, label="Image Size")
             
             gr.Markdown("### Advanced Settings")
             
@@ -770,11 +794,11 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
     gen_btn.click(
         fn=generate_dataset,
         inputs=[
-            coastal, small_water,  # Water features (coastal + small bodies)
+            coastal,  # Water features (coastal only)
             veg_sparse, veg_moderate, veg_dense,  # Vegetation levels
             paved, unpaved, highways,  # Roads
             residential, commercial, industrial,  # Buildings
-            count, scene, density, steps, guidance, width, height, seed, neg_prompt  # Settings
+            count, scene, density, steps, guidance, height, seed, neg_prompt  # Settings
         ],
         outputs=[status_box, path_box]
     )
