@@ -124,14 +124,14 @@ class TemplateVariantGenerator:
                 "{scene} with {density} {buildings} along {roads_short}{water}. {vegetation}.",
             ],
             'urban-moderate': [
-                "{scene} with {density}, {buildings}. {roads}. {vegetation}.",
-                "{scene} with {density}. {roads} connect {buildings_short}. {vegetation}.",
-                "{scene} with {density} {buildings}. {roads}. {vegetation}.",
+                "{scene} with {density}, {buildings}{water}. {roads}. {vegetation}.",
+                "{scene} with {density}{water}. {roads} connect {buildings_short}. {vegetation}.",
+                "{scene} with {density} {buildings}{water}. {roads}. {vegetation}.",
             ],
             'rural-sparse': [
-                "{scene} with {density}, {buildings}. {roads}. {vegetation}. {closure}",
-                "{scene} with {density} {buildings} connected by {roads_short}. {vegetation}. {closure}",
-                "{scene} with {buildings} connected by {roads_short}. {vegetation} across predominantly bareland. {closure}",
+                "{scene} with {density}, {buildings}{water}. {roads}. {vegetation}. {closure}",
+                "{scene} with {density} {buildings}{water} connected by {roads_short}. {vegetation}. {closure}",
+                "{scene} with {buildings}{water} connected by {roads_short}. {vegetation} across predominantly bareland. {closure}",
             ]
         }
     
