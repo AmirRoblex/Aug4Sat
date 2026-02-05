@@ -135,6 +135,7 @@ class TemplateVariantGenerator:
             ]
         }
     
+
     def _substitute(self, text):
         """Replace phrases with synonyms"""
         phrases = sorted(self.synonyms.keys(), key=len, reverse=True)
@@ -576,10 +577,12 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             
             gr.Markdown("### Water Bodies")
             with gr.Group():
-                rivers = gr.Checkbox(label="Rivers")
-                lakes = gr.Checkbox(label="Lakes")
                 coastal = gr.Checkbox(label="Coastal Waters", value=True)
-                ponds = gr.Checkbox(label="Ponds")
+                # Note: Only coastal water is available (trained in LoRA dataset)
+                # Rivers, lakes, ponds were not in training data
+                rivers = gr.Checkbox(visible=False)
+                lakes = gr.Checkbox(visible=False)
+                ponds = gr.Checkbox(visible=False)
             
             gr.Markdown("### Vegetation")
             with gr.Group():
