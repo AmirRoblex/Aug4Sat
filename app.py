@@ -630,7 +630,7 @@ css = """
     font-size: 2rem;
     font-weight: 700;
     letter-spacing: -0.025em;
-    color: #111827;
+    color: #f5f5f5;
     margin: 0;
     line-height: 1;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
