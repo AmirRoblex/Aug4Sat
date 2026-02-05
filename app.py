@@ -756,26 +756,6 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 value="low",
                 label="Building Density"
             )
-            
-            height = gr.Radio([768, 1024], value=1024, label="Image Size")
-            
-            gr.Markdown("### Advanced Settings")
-            
-            neg_prompt = gr.Textbox(
-                label="Negative Prompt",
-                value="blurry, low quality, distorted, text, watermark",
-                lines=2
-            )
-                    
-            height = gr.Radio([768, 1024], value=1024, label="Image Size")
-            
-            gr.Markdown("### Advanced Settings")
-            
-            neg_prompt = gr.Textbox(
-                label="Negative Prompt",
-                value="blurry, low quality, distorted, text, watermark",
-                lines=2
-            )
     
     # Configuration Quality Indicator
     quality_indicator = gr.Markdown(
@@ -922,13 +902,20 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
     
     # Wire up generation
     gen_btn.click(
-        fn=generate_dataset,
+        fn=lambda coastal, veg_sparse, veg_moderate, veg_dense, paved, unpaved, highways, 
+                  residential, commercial, industrial, count, scene, density, steps, guidance, seed: 
+            generate_dataset(
+                coastal, veg_sparse, veg_moderate, veg_dense, paved, unpaved, highways,
+                residential, commercial, industrial, count, scene, density, steps, guidance,
+                1024,  # Hardcoded height
+                seed,
+                "blurry, low quality, distorted, text, watermark"  # Hardcoded negative prompt
+            ),
         inputs=[
-            coastal,  # Water features (coastal only)
-            veg_sparse, veg_moderate, veg_dense,  # Vegetation levels
+            coastal, veg_sparse, veg_moderate, veg_dense,  # Vegetation
             paved, unpaved, highways,  # Roads
             residential, commercial, industrial,  # Buildings
-            count, scene, density, steps, guidance, height, seed, neg_prompt  # Settings
+            count, scene, density, steps, guidance, seed  # Settings
         ],
         outputs=[status_box, path_box]
     )
