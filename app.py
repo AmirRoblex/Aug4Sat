@@ -67,77 +67,81 @@ def load_sdxl_with_lora():
     yield f"✅ SDXL + LoRA loaded ({mem_allocated:.1f} GB)"
 
 # ============================================================================
-# TEMPLATE VARIANT GENERATOR
+# TEMPLATE VARIANT GENERATOR (USING ACTUAL TRAINING DATA VOCABULARY)
 # ============================================================================
 
 import random
 
 class TemplateVariantGenerator:
-    """Generate diverse prompts using template variants and synonym substitution"""
+    """Generate diverse prompts using actual training data phrases for LoRA compatibility"""
     
     def __init__(self):
-        # Synonym dictionary from training data
+        # ACTUAL phrases from training data for synonym substitution
         self.synonyms = {
-            # Scene types
-            'Coastal urban settlement': ['Coastal urban settlement', 'Coastal settlement', 'Coastal urban zone', 'Semi-arid coastal landscape'],
-            'Urban settlement': ['Urban settlement', 'Urban area', 'Urban core', 'Peri-urban settlement'],
-            'Rural arid landscape': ['Rural arid landscape', 'Rural landscape', 'Arid landscape', 'Rural agricultural area'],
-            'Mixed-use settlement': ['Mixed-use settlement', 'Mixed settlement', 'Mixed-use urban settlement'],
+            # Scene types (from training data)
+            'Rural arid landscape': ['Rural arid landscape', 'Arid rural landscape', 'Rural settlement in an arid landscape', 'Sparse rural settlement in an arid landscape'],
+            'Urban settlement': ['Urban settlement', 'Urban residential settlement', 'Mixed-use urban settlement', 'Semi-urban settlement'],
+            'Coastal scene': ['Coastal scene', 'Coastal urban settlement', 'Coastal scene with a water body'],
             
-            # Density
-            'low building density': ['low building density', 'sparse building density', 'minimal building density'],
-            'moderate building density': ['moderate building density', 'moderate development', 'moderate density'],
-            'high building density': ['high building density', 'dense building density', 'dense development'],
+            # Building density (exact training phrases)
+            'low building density': ['low building density', 'sparse building density', 'minimal building density', 'low to moderate building density'],
+            'moderate building density': ['moderate building density', 'moderate to high building density', 'moderate development'],
+            'high building density': ['high building density', 'dense building density', 'tightly packed'],
             
-            # Buildings
-            'featuring': ['featuring', 'with', 'including'],
-            'structures': ['structures', 'buildings', 'development'],
-            'isolated structures': ['isolated structures', 'scattered structures', 'dispersed structures'],
-            'tightly packed structures': ['tightly packed structures', 'dense building clusters', 'densely packed buildings'],
-            'clusters of': ['clusters of', 'groups of', 'collections of'],
+            # Buildings (from training)
+            'scattered': ['scattered', 'dispersed', 'isolated'],
+            'clusters': ['clusters', 'groups', 'patches'],
+            'tightly packed': ['tightly packed', 'densely packed', 'compact'],
+            'residential structures': ['residential structures', 'residential buildings', 'houses', 'dwellings'],
             
-            # Roads
-            'Paved roads form grid-like network': ['Paved roads form grid-like network', 'Grid-like paved road network', 'Paved road network forms grid pattern'],
-            'run along the periphery': ['run along the periphery', 'line the edges', 'border the area'],
-            'weave through': ['weave through', 'crisscross through', 'wind through', 'traverse'],
-            'dirt tracks': ['dirt tracks', 'unpaved tracks', 'dirt roads'],
+            # Roads (exact training phrases)
+            'Unpaved roads': ['Unpaved roads', 'Unpaved dirt roads', 'Dirt roads', 'Unpaved tracks'],
+            'Paved roads': ['Paved roads', 'A paved road', 'Paved road network'],
+            'form a grid': ['form a grid', 'form a grid-like network', 'form a loose grid', 'form an irregular grid'],
+            'connect': ['connect', 'connecting', 'traverse'],
             
-            # Vegetation
-            'Sparse vegetation': ['Sparse vegetation', 'Scattered vegetation', 'Limited vegetation'],
-            'consisting of': ['consisting of', 'including', 'with'],
-            'scattered shrubs and bushes': ['scattered shrubs and bushes', 'isolated shrubs', 'sparse shrubs'],
-            'across predominantly': ['across predominantly', 'on mostly', 'across primarily'],
-            'bareland': ['bareland', 'bare terrain', 'exposed terrain', 'bare soil'],
-            'interspersed with': ['interspersed with', 'mixed with', 'dotted with', 'scattered among'],
-            'patches': ['patches', 'areas', 'sections'],
+            # Vegetation (exact training phrases)
+            'Sparse vegetation': ['Sparse vegetation', 'Minimal vegetation', 'Limited vegetation coverage'],
+            'scattered shrubs and bushes': ['scattered shrubs and bushes', 'scattered shrubs', 'scattered shrubs and trees', 'isolated shrubs'],
+            'Moderate vegetation': ['Moderate vegetation', 'Vegetation coverage', 'Moderate vegetation coverage'],
+            'patches of trees': ['patches of trees', 'scattered trees', 'patches of trees and shrubs'],
+            'Dense vegetation': ['Dense vegetation', 'Vegetation is dense', 'Thick vegetation'],
             
-            # Water
-            'adjacent water body': ['adjacent water body', 'nearby water body', 'water body adjacent'],
-            'developed shoreline': ['developed shoreline', 'shoreline development', 'built shoreline']
+            # Terrain (exact training phrases)
+            'predominantly bareland': ['predominantly bareland', 'predominantly bare', 'extensive bareland', 'mostly bare'],
+            'bare, sandy terrain': ['bare, sandy terrain', 'bare, arid land', 'dry, sandy terrain', 'bareland'],
+            'arid': ['arid', 'dry', 'semi-arid'],
+            
+            # Water (exact training phrases)
+            'adjacent to': ['adjacent to', 'near', 'along'],
+            'a water body': ['a water body', 'water', 'the water'],
+            'shoreline': ['shoreline', 'coast', 'coastal area'],
+            'No visible water bodies': ['No visible water bodies', 'No water bodies are visible', 'with no visible water bodies']
         }
         
-        # Template structures
+        # Template structures using ACTUAL training data sentence patterns
         self.templates = {
-            'coastal-moderate': [
-                "{scene} with {density} {buildings}{water}. {roads}. {vegetation}.",
-                "{scene}{water}, with {density} {buildings}. {roads}. {vegetation}.",
-                "{scene} with {density} {buildings} along {roads_short}{water}. {vegetation}.",
+            'rural-sparse': [
+                "{scene} with {density} and {buildings}. {roads} {road_action} the {building_location}. {vegetation} consisting of {veg_detail} on {terrain}.",
+                "{scene} with {density}, featuring {buildings}. {roads} connect the {building_location}, with {vegetation} on {terrain}.",
+                "{scene} in an arid landscape with {density} and {buildings}. {roads} {road_action} through the area. {vegetation} {veg_detail} {terrain}.{water_note}",
+                "Arid rural settlement with {density} and {buildings}. {roads} traverse the terrain, with {vegetation} on {terrain}.{water_note}",
             ],
             'urban-moderate': [
-                "{scene} with {density}, {buildings}{water}. {roads}. {vegetation}.",
-                "{scene} with {density}{water}. {roads} connect {buildings_short}. {vegetation}.",
-                "{scene} with {density} {buildings}{water}. {roads}. {vegetation}.",
+                "{scene} with {density}, featuring {buildings}. {roads} {road_action} {building_location}. {vegetation} {veg_detail} {terrain}.{water_note}",
+                "{scene} with {density} and {buildings}. {roads} form a grid throughout the area. {vegetation} interspersed with {terrain}.{water_note}",
+                "Urban settlement with {density}, featuring {buildings}. {roads} {road_action} through the area. {vegetation} scattered among {terrain}.{water_note}",
             ],
-            'rural-sparse': [
-                "{scene} with {density}, {buildings}{water}. {roads}. {vegetation}. {closure}",
-                "{scene} with {density} {buildings}{water} connected by {roads_short}. {vegetation}. {closure}",
-                "{scene} with {buildings}{water} connected by {roads_short}. {vegetation} across predominantly bareland. {closure}",
+            'coastal': [
+                "Coastal scene with a water body adjacent to {shoreline_desc}. {density} with {buildings} along the {shore_position}. {roads} {road_action} {building_location}. {vegetation} on {terrain}.",
+                "Coastal scene {water_position} a developed shoreline. {density} featuring {buildings}. {roads} visible along the coast. {vegetation} {veg_detail} {terrain}.",
+                "Coastal urban settlement with {density} and {buildings} near the shoreline. {roads} form a network through the area. {vegetation} on surrounding {terrain}.",
             ]
         }
     
 
     def _substitute(self, text):
-        """Replace phrases with synonyms"""
+        """Replace phrases with synonyms for diversity"""
         phrases = sorted(self.synonyms.keys(), key=len, reverse=True)
         
         for phrase in phrases:
@@ -147,133 +151,163 @@ class TemplateVariantGenerator:
         
         return text
     
-    def _get_scene_phrase(self, scene_type):
-        mapping = {
-            'coastal-focused': 'Coastal urban settlement',
-            'urban-heavy': 'Urban settlement',
-            'rural-dominant': 'Rural arid landscape',
-            'balanced': 'Mixed-use settlement'
-        }
-        return mapping.get(scene_type, 'Settlement')
-    
-    def _get_density_phrase(self, density_bias):
-        mapping = {
-            'sparse': 'low building density',
-            'moderate': 'moderate building density',
-            'dense': 'high building density',
-            'mixed': 'varied building density'
-        }
-        return mapping.get(density_bias, 'moderate building density')
-    
-    def _get_building_phrase(self, features, density_bias):
-        has_buildings = any([features.get('residential'), features.get('commercial'), features.get('industrial')])
-        
-        if not has_buildings:
-            return None
-        
-        if density_bias == 'sparse':
-            return "featuring isolated structures and dispersed development"
-        elif density_bias == 'dense':
-            if features.get('industrial'):
-                return "featuring dense building clusters and industrial facilities"
-            else:
-                return "featuring tightly packed structures"
-        else:
-            types = []
-            if features.get('residential'): types.append("residential")
-            if features.get('commercial'): types.append("commercial")
-            if features.get('industrial'): types.append("industrial")
-            
-            if len(types) > 1:
-                return f"featuring clusters of {' and '.join(types)} structures"
-            else:
-                return "featuring moderate development"
-    
-    def _get_road_phrase(self, features):
-        has_paved = features.get('paved_roads') or features.get('highways')
-        has_unpaved = features.get('unpaved_roads')
-        
-        if has_paved and has_unpaved:
-            return "Paved roads run along the periphery while unpaved dirt tracks weave through the interior"
-        elif has_paved:
-            if features.get('highways'):
-                return "Paved road network forms grid pattern with major highways"
-            else:
-                return "Paved roads form grid-like network connecting neighborhoods"
-        elif has_unpaved:
-            return "Unpaved tracks and dirt roads crisscross through the area"
-        return None
-    
-    def _get_vegetation_phrase(self, features, density_bias):
-        has_dense = features.get('dense_forest')
-        has_sparse = features.get('sparse_trees') or features.get('grassland')
-        
-        if has_dense:
-            return "Dense vegetation consisting of thick forest coverage and agricultural fields"
-        elif has_sparse:
-            if density_bias == 'sparse':
-                return "Sparse vegetation consisting of scattered shrubs and bushes across predominantly bareland"
-            else:
-                return "Sparse vegetation patches interspersed with bareland"
-        else:
-            return "Minimal vegetation, predominantly bareland"
-    
-    def _get_water_phrase(self, features):
-        if features.get('coastal_water'):
-            return "adjacent water body with developed shoreline"
-        elif features.get('rivers') or features.get('lakes'):
-            return "with visible water bodies throughout the terrain"
-        return None
-    
-    def _select_template_category(self, scene_type, density_bias):
-        """Choose appropriate template category"""
-        if 'coastal' in scene_type and density_bias in ['moderate', 'dense']:
-            return 'coastal-moderate'
-        elif 'urban' in scene_type:
-            return 'urban-moderate'
-        elif 'rural' in scene_type and density_bias == 'sparse':
+    def _get_scene_type(self, scene, has_coastal_water):
+        """Determine scene template type"""
+        if has_coastal_water:
+            return 'coastal'
+        elif scene == 'rural':
             return 'rural-sparse'
         else:
             return 'urban-moderate'
     
-    def _fill_template(self, template, features, scene_type, density_bias):
-        """Fill template with feature descriptions"""
-        replacements = {
-            '{scene}': self._get_scene_phrase(scene_type),
-            '{density}': self._get_density_phrase(density_bias),
-            '{buildings}': self._get_building_phrase(features, density_bias) or "featuring minimal development",
-            '{buildings_short}': "neighborhoods" if features.get('residential') else "structures",
-            '{roads}': self._get_road_phrase(features) or "Dirt tracks traverse the area",
-            '{roads_short}': "paved roads" if features.get('paved_roads') else "unpaved tracks",
-            '{vegetation}': self._get_vegetation_phrase(features, density_bias) or "Minimal vegetation",
-            '{water}': f", {self._get_water_phrase(features)}" if self._get_water_phrase(features) else "",
-            '{closure}': "No visible water bodies; development is minimal and dispersed" if not features.get('coastal_water') and scene_type == 'rural-dominant' else ""
-        }
-        
-        result = template
-        for key, value in replacements.items():
-            result = result.replace(key, value)
-        
-        # Clean up
-        result = result.replace("  ", " ").replace(" .", ".").replace("..", ".").strip()
-        
-        return result
+    def _build_scene_phrase(self, scene):
+        """Build scene opening"""
+        if scene == 'rural':
+            return random.choice(self.synonyms['Rural arid landscape'])
+        else:
+            return random.choice(self.synonyms['Urban settlement'])
     
-    def generate(self, features, scene_type, density_bias):
-        """Generate a single prompt with template variants and synonyms"""
-        # Select template category
-        category = self._select_template_category(scene_type, density_bias)
+    def _build_density_phrase(self, density):
+        """Build building density phrase"""
+        density_map = {
+            'low': random.choice(self.synonyms['low building density']),
+            'moderate': random.choice(self.synonyms['moderate building density']),
+            'high': random.choice(self.synonyms['high building density'])
+        }
+        return density_map.get(density, 'moderate building density')
+    
+    def _build_buildings_phrase(self, density):
+        """Build buildings description"""
+        if density == 'low':
+            return f"{random.choice(self.synonyms['scattered'])} {random.choice(self.synonyms['residential structures'])}"
+        elif density == 'high':
+            return f"{random.choice(self.synonyms['tightly packed'])} {random.choice(self.synonyms['residential structures'])}"
+        else:
+            return f"{random.choice(self.synonyms['clusters'])} of {random.choice(self.synonyms['residential structures'])}"
+    
+    def _build_roads_phrase(self, paved, unpaved):
+        """Build roads description"""
+        if paved:
+            return random.choice(self.synonyms['Paved roads'])
+        elif unpaved:
+            return random.choice(self.synonyms['Unpaved roads'])
+        else:
+            return 'Roads'
+    
+    def _build_road_action(self, paved):
+        """Get road action verb"""
+        if paved:
+            return random.choice(self.synonyms['form a grid'])
+        else:
+            return random.choice(self.synonyms['connect'])
+    
+    def _build_vegetation_phrase(self, veg_level):
+        """Build vegetation description"""
+        if veg_level == 'sparse':
+            return random.choice(self.synonyms['Sparse vegetation'])
+        elif veg_level == 'moderate':
+            return random.choice(self.synonyms['Moderate vegetation'])
+        elif veg_level == 'dense':
+            return random.choice(self.synonyms['Dense vegetation'])
+        else:
+            return 'Minimal vegetation'
+    
+    def _build_veg_detail(self, veg_level):
+        """Build vegetation detail"""
+        if veg_level == 'sparse':
+            return random.choice(self.synonyms['scattered shrubs and bushes'])
+        elif veg_level == 'moderate':
+            return random.choice(self.synonyms['patches of trees'])
+        elif veg_level == 'dense':
+            return 'with thick tree coverage'
+        else:
+            return 'with scattered shrubs'
+    
+    def _build_terrain_phrase(self, veg_level):
+        """Build terrain description"""
+        if veg_level in ['sparse', None]:
+            return random.choice(self.synonyms['predominantly bareland'])
+        else:
+            return random.choice(self.synonyms['bare, sandy terrain'])
+    
+    def _build_water_components(self, has_coastal, has_small):
+        """Build water-related phrases"""
+        if has_coastal:
+            return {
+                'water_position': random.choice(['with', 'near', 'adjacent to']),
+                'shoreline_desc': 'a developed shoreline',
+                'shore_position': random.choice(self.synonyms['shoreline']),
+                'water_note': '',
+                'building_location': 'coastal structures'
+            }
+        elif has_small:
+            return {
+                'water_note': ' A small water body is visible in the area.',
+                'water_position': '',
+                'shoreline_desc': '',
+                'shore_position': '',
+                'building_location': 'structures'
+            }
+        else:
+            return {
+                'water_note': f" {random.choice(self.synonyms['No visible water bodies'])}.",
+                'water_position': '',
+                'shoreline_desc': '',
+                'shore_position': '',
+                'building_location': 'structures'
+            }
+    
+    def generate(self, features):
+        """Generate diverse prompts using actual training data vocabulary
         
-        # Pick random template
-        template = random.choice(self.templates[category])
+        Args:
+            features: dict with keys:
+                - scene: 'rural' or 'urban'
+                - density: 'low', 'moderate', 'high'
+                - coastal_water: bool
+                - small_water: bool
+                - veg_level: 'sparse', 'moderate', 'dense', or None
+                - paved_roads: bool
+                - unpaved_roads: bool
+        """
+        # Determine template type
+        scene_type = self._get_scene_type(features['scene'], features.get('coastal_water', False))
         
-        # Fill template
-        filled = self._fill_template(template, features, scene_type, density_bias)
+        # Select random template from the scene type
+        template = random.choice(self.templates[scene_type])
         
-        # Apply synonym substitution
-        varied = self._substitute(filled)
+        # Build all components using training data phrases
+        scene = self._build_scene_phrase(features['scene'])
+        density = self._build_density_phrase(features.get('density', 'moderate'))
+        buildings = self._build_buildings_phrase(features.get('density', 'moderate'))
+        roads = self._build_roads_phrase(features.get('paved_roads', False), features.get('unpaved_roads', False))
+        road_action = self._build_road_action(features.get('paved_roads', False))
+        vegetation = self._build_vegetation_phrase(features.get('veg_level'))
+        veg_detail = self._build_veg_detail(features.get('veg_level'))
+        terrain = self._build_terrain_phrase(features.get('veg_level'))
+        water_components = self._build_water_components(
+            features.get('coastal_water', False),
+            features.get('small_water', False)
+        )
         
-        return varied
+        # Fill template with components
+        prompt = template.format(
+            scene=scene,
+            density=density,
+            buildings=buildings,
+            roads=roads,
+            road_action=road_action,
+            vegetation=vegetation,
+            veg_detail=veg_detail,
+            terrain=terrain,
+            building_location=water_components.get('building_location', 'structures'),
+            **water_components
+        )
+        
+        # Apply synonym substitution for additional diversity
+        prompt = self._substitute(prompt)
+        
+        return prompt
 
 # ============================================================================
 # MAIN GENERATION FUNCTION
@@ -281,9 +315,9 @@ class TemplateVariantGenerator:
 
 def generate_dataset(
     # Water features
-    rivers, lakes, coastal, ponds,
-    # Vegetation features
-    forest, sparse_trees, grass, ag_fields,
+    coastal, small_water,
+    # Vegetation features (simplified to match training data)
+    veg_sparse, veg_moderate, veg_dense,
     # Road features
     paved, unpaved, highways,
     # Building features
@@ -313,30 +347,32 @@ def generate_dataset(
         if template_generator is None:
             template_generator = TemplateVariantGenerator()
         
-        # Build feature dictionary
+        # Build feature dictionary for template generator
+        # Determine vegetation level
+        veg_level = None
+        if veg_dense:
+            veg_level = 'dense'
+        elif veg_moderate:
+            veg_level = 'moderate'
+        elif veg_sparse:
+            veg_level = 'sparse'
+        
         feature_dict = {
-            'rivers': rivers,
-            'lakes': lakes,
+            'scene': scene,
+            'density': density,
             'coastal_water': coastal,
-            'ponds': ponds,
-            'dense_forest': forest,
-            'sparse_trees': sparse_trees,
-            'grassland': grass,
-            'agricultural_fields': ag_fields,
+            'small_water': small_water,
+            'veg_level': veg_level,
             'paved_roads': paved,
-            'unpaved_roads': unpaved,
-            'highways': highways,
-            'residential': residential,
-            'commercial': commercial,
-            'industrial': industrial
+            'unpaved_roads': unpaved or highways  # highways are paved roads
         }
         
         yield f"📝 Generating {count} prompts...", ""
         
-        # Generate prompts
+        # Generate prompts (each call creates diversity through templates + synonyms + randomization)
         prompts = []
         for i in range(int(count)):
-            prompt = template_generator.generate(feature_dict, scene, density)
+            prompt = template_generator.generate(feature_dict)
             prompts.append(prompt)
         
         # Show sample prompts
@@ -621,15 +657,15 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 seed = gr.Textbox(label="Seed (optional)", placeholder="Leave empty for random")
             
             scene = gr.Dropdown(
-                ["balanced", "coastal-focused", "urban-heavy", "rural-dominant"],
-                value="balanced",
-                label="Scene Distribution"
+                ["rural", "urban"],
+                value="rural",
+                label="Scene Type (rural = arid landscape, urban = settlement)"
             )
             
             density = gr.Dropdown(
-                ["sparse", "moderate", "dense", "mixed"],
+                ["low", "moderate", "high"],
                 value="moderate",
-                label="Feature Density"
+                label="Building Density"
             )
             
             with gr.Row():
@@ -667,15 +703,15 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
     </div>
     """)
     
-    # Wire up generation
+    # Wire up generation - NEW: Simplified inputs matching training data
     gen_btn.click(
         fn=generate_dataset,
         inputs=[
-            rivers, lakes, coastal, ponds,
-            forest, sparse_trees, grass, ag_fields,
-            paved, unpaved, highways,
-            residential, commercial, industrial,
-            count, scene, density, steps, guidance, width, height, seed, neg_prompt
+            coastal, small_water,  # Water features (coastal + small bodies)
+            veg_sparse, veg_moderate, veg_dense,  # Vegetation levels
+            paved, unpaved, highways,  # Roads
+            residential, commercial, industrial,  # Buildings
+            count, scene, density, steps, guidance, width, height, seed, neg_prompt  # Settings
         ],
         outputs=[status_box, path_box]
     )
