@@ -1,4 +1,4 @@
-# app_design.py - Aug4Sat: AI-Powered Synthetic Satellite Imagery Generation
+# app.py - Aug4Sat: AI-Powered Synthetic Satellite Imagery Generation
 import gradio as gr
 import base64
 import os
@@ -407,12 +407,11 @@ def generate_dataset(
                 del result, img
                 torch.cuda.empty_cache()
                 
-                # Update progress every 5 images or at the end
-                if (successful % 5 == 0) or (successful == len(prompts)):
-                    progress_text = f"🎨 Generating images: {successful}/{len(prompts)} complete"
-                    if failed > 0:
-                        progress_text += f" ({failed} failed)"
-                    yield progress_text, ""
+                # Update progress after each image
+                progress_text = f"🎨 Generating images: {successful}/{len(prompts)} complete"
+                if failed > 0:
+                    progress_text += f" ({failed} failed)"
+                yield progress_text, ""
                 
             except RuntimeError as e:
                 if "out of memory" in str(e).lower():
