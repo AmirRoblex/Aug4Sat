@@ -703,12 +703,7 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             
             gr.Markdown("### Water Bodies")
             with gr.Group():
-                coastal = gr.Checkbox(label="Coastal Water", value=True)
-                gr.Markdown("""
-                <div style='background: #eff6ff; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #1e40af;'>
-                    💡 <strong>Note:</strong> Coastal water requires sparse vegetation only (no moderate/dense) and no highways, based on training data patterns.
-                </div>
-                """)
+                coastal = gr.Checkbox(label="Coastal Water (7.1% of training data)", value=False)
                 # Hidden - not in training data
                 rivers = gr.Checkbox(visible=False)
                 lakes = gr.Checkbox(visible=False)
@@ -716,14 +711,9 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             
             gr.Markdown("### Vegetation Coverage")
             with gr.Group():
-                veg_sparse = gr.Checkbox(label="Sparse (scattered shrubs)", value=True)
-                veg_moderate = gr.Checkbox(label="Moderate (patches of trees)")
-                veg_dense = gr.Checkbox(label="Dense (forests/agriculture)")
-                gr.Markdown("""
-                <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
-                    ⚠️ <strong>Constraint:</strong> Moderate/Dense vegetation cannot be combined with coastal water (incompatible with training data).
-                </div>
-                """)
+                veg_sparse = gr.Checkbox(label="Sparse (80.4% of training data)", value=True)
+                veg_moderate = gr.Checkbox(label="Moderate (51.6% of training data)")
+                veg_dense = gr.Checkbox(label="Dense (16.8% of training data)")
                 # Hidden - simplified from original
                 forest = gr.Checkbox(visible=False)
                 sparse_trees = gr.Checkbox(visible=False)
@@ -732,25 +722,15 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             
             gr.Markdown("### Roads & Infrastructure")
             with gr.Group():
-                paved = gr.Checkbox(label="Paved Roads", value=True)
-                unpaved = gr.Checkbox(label="Unpaved/Dirt Roads", value=True)
-                highways = gr.Checkbox(label="Highways")
-                gr.Markdown("""
-                <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
-                    ⚠️ <strong>Constraint:</strong> Highways cannot be combined with coastal water, dense vegetation, or high density (0% in training data).
-                </div>
-                """)
+                paved = gr.Checkbox(label="Paved Roads (99.4% of training data)", value=True)
+                unpaved = gr.Checkbox(label="Unpaved/Dirt Roads (76.7% of training data)", value=True)
+                highways = gr.Checkbox(label="Highways (3.7% of training data - rare)")
             
             gr.Markdown("### Buildings")
             with gr.Group():
-                residential = gr.Checkbox(label="Residential", value=True)
-                commercial = gr.Checkbox(label="Commercial")
-                industrial = gr.Checkbox(label="Industrial")
-                gr.Markdown("""
-                <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
-                    ⚠️ <strong>Constraint:</strong> Commercial/Industrial buildings cannot be combined with coastal water (0% in training data).
-                </div>
-                """)
+                residential = gr.Checkbox(label="Residential (54.3% of training data)", value=True)
+                commercial = gr.Checkbox(label="Commercial (4.7% of training data - rare)")
+                industrial = gr.Checkbox(label="Industrial (6.8% of training data - rare)")
         
         # Right Column - Settings
         with gr.Column(scale=1):
@@ -768,19 +748,14 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             scene = gr.Dropdown(
                 ["rural", "urban"],
                 value="rural",
-                label="Scene Type (rural = arid landscape, urban = settlement)"
+                label="Scene Type"
             )
             
             density = gr.Dropdown(
                 ["low", "moderate", "high"],
-                value="moderate",
+                value="low",
                 label="Building Density"
             )
-            gr.Markdown("""
-            <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
-                ⚠️ <strong>Constraint:</strong> High density cannot be combined with coastal water, rural scenes, or sparse vegetation (0% in training data).
-            </div>
-            """)
             
             height = gr.Radio([768, 1024], value=1024, label="Image Size")
             
@@ -791,6 +766,28 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 value="blurry, low quality, distorted, text, watermark",
                 lines=2
             )
+                    
+            height = gr.Radio([768, 1024], value=1024, label="Image Size")
+            
+            gr.Markdown("### Advanced Settings")
+            
+            neg_prompt = gr.Textbox(
+                label="Negative Prompt",
+                value="blurry, low quality, distorted, text, watermark",
+                lines=2
+            )
+    
+    # Configuration Quality Indicator
+    quality_indicator = gr.Markdown(
+        value="📊 **Configuration Quality:** Select features to see quality estimate",
+        visible=True
+    )
+    
+    # Validation warnings box
+    warnings_box = gr.Markdown(
+        value="",
+        visible=True
+    )
     
     # Status display
     status_box = gr.Textbox(
@@ -816,154 +813,114 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
     """)
     
     # ========================================================================
-    # CONSTRAINT LOGIC - Based on Training Data Analysis
+    # SIMPLIFIED CONSTRAINT LOGIC - Based on Real Training Data (322 samples)
     # ========================================================================
-    # Comprehensive rules extracted from comprehensive_rules.py analysis:
-    # - Coastal: 3/10 (30%), Sparse veg: 10/10 (100%), Dense veg: 0/10 (0%)
-    # - Highways: 0/10 (0%), High density: 0/10 (0%)
-    # - Commercial: 0/10 (0%), Industrial: 0/10 (0%)
+    # Analysis shows ONLY ONE hard constraint (0% occurrence):
+    # - Coastal + Highway: NEVER occurs
+    # All other combinations exist in training data (though some are rare)
     
-    def apply_coastal_constraints(coastal_enabled):
-        """When coastal water is selected, disable ALL incompatible options."""
-        if coastal_enabled:
-            return {
-                veg_moderate: gr.update(value=False, interactive=False),
-                veg_dense: gr.update(value=False, interactive=False),
-                highways: gr.update(value=False, interactive=False),
-                commercial: gr.update(value=False, interactive=False),
-                industrial: gr.update(value=False, interactive=False),
-                density: gr.update(value="low" if density.value == "high" else density.value)
-            }
+    def validate_and_update_quality(coastal_val, veg_s, veg_m, veg_d, highways_val, 
+                                      comm, ind, density_val, scene_val):
+        """
+        Validate configuration and show quality indicator.
+        Only blocks: Coastal + Highway (0% in training data)
+        Shows warnings for rare combinations (<1%)
+        """
+        warnings = []
+        errors = []
+        
+        # HARD CONSTRAINT: Coastal + Highway = NEVER (0%)
+        if coastal_val and highways_val:
+            errors.append("❌ **Coastal water + Highways** is not supported (0% in training data)")
+            # Auto-fix: disable highway
+            highways_val = False
+        
+        # SOFT WARNINGS: Very rare combinations (<1%)
+        if coastal_val and density_val == "high":
+            warnings.append("⚠️ **Coastal + High Density** is very rare (0.9% in training). Results may be unpredictable.")
+        
+        if coastal_val and comm:
+            warnings.append("⚠️ **Coastal + Commercial** is very rare (0.3% in training). Results may be unpredictable.")
+        
+        if coastal_val and scene_val == "rural":
+            warnings.append("⚠️ **Coastal + Rural** is very rare (0.9% in training). Consider urban scene instead.")
+        
+        if highways_val and comm:
+            warnings.append("⚠️ **Highways + Commercial** is very rare (0.3% in training). Results may be unpredictable.")
+        
+        if comm and scene_val == "rural":
+            warnings.append("⚠️ **Commercial + Rural** is very rare (0.6% in training). Consider urban scene instead.")
+        
+        # Calculate quality score (rough estimate based on feature prevalence)
+        quality_score = 100
+        if coastal_val: quality_score -= 30  # Coastal is rare (7.1%)
+        if highways_val: quality_score -= 20  # Highways rare (3.7%)
+        if comm: quality_score -= 20  # Commercial rare (4.7%)
+        if ind: quality_score -= 15  # Industrial rare (6.8%)
+        if density_val == "high": quality_score -= 20  # High density rare (7.8%)
+        if veg_d: quality_score -= 10  # Dense veg somewhat rare (16.8%)
+        
+        quality_score = max(quality_score, 0)
+        
+        # Build quality indicator
+        if quality_score >= 80:
+            quality_icon = "✅"
+            quality_label = "Excellent"
+            quality_color = "#10b981"
+        elif quality_score >= 60:
+            quality_icon = "👍"
+            quality_label = "Good"
+            quality_color = "#3b82f6"
+        elif quality_score >= 40:
+            quality_icon = "⚠️"
+            quality_label = "Fair"
+            quality_color = "#f59e0b"
         else:
-            return {
-                veg_moderate: gr.update(interactive=True),
-                veg_dense: gr.update(interactive=True),
-                highways: gr.update(interactive=True),
-                commercial: gr.update(interactive=True),
-                industrial: gr.update(interactive=True),
-                density: gr.update()
-            }
+            quality_icon = "❌"
+            quality_label = "Poor"
+            quality_color = "#ef4444"
+        
+        quality_text = f"""
+<div style='background: {quality_color}22; border: 2px solid {quality_color}; padding: 12px; border-radius: 8px; margin: 10px 0;'>
+    <div style='font-size: 1.1rem; font-weight: bold; color: {quality_color};'>
+        {quality_icon} Configuration Quality: {quality_label} ({quality_score}%)
+    </div>
+    <div style='font-size: 0.85rem; margin-top: 4px; color: #6b7280;'>
+        Based on feature prevalence in 322 training samples
+    </div>
+</div>
+"""
+        
+        # Build warnings text
+        warnings_text = ""
+        if errors:
+            warnings_text += "<div style='background: #fee2e2; border-left: 4px solid #dc2626; padding: 12px; margin: 10px 0; border-radius: 4px;'>\n"
+            warnings_text += "<div style='font-weight: bold; color: #dc2626; margin-bottom: 8px;'>⛔ Invalid Configuration:</div>\n"
+            for err in errors:
+                warnings_text += f"<div style='color: #991b1b; margin: 4px 0;'>{err}</div>\n"
+            warnings_text += "</div>\n"
+        
+        if warnings:
+            warnings_text += "<div style='background: #fef3c7; border-left: 4px solid #f59e0b; padding: 12px; margin: 10px 0; border-radius: 4px;'>\n"
+            warnings_text += "<div style='font-weight: bold; color: #92400e; margin-bottom: 8px;'>⚠️ Rare Combinations Detected:</div>\n"
+            for warn in warnings:
+                warnings_text += f"<div style='color: #78350f; margin: 4px 0;'>{warn}</div>\n"
+            warnings_text += "</div>\n"
+        
+        return quality_text, warnings_text, highways_val
     
-    def apply_vegetation_constraints(veg_mod, veg_dense):
-        """When moderate/dense vegetation is selected, disable coastal water."""
-        # Moderate veg: very rare with coastal (1/10)
-        # Dense veg: NEVER with coastal, urban, or highways (0/10)
-        if veg_mod or veg_dense:
-            updates = {coastal: gr.update(value=False, interactive=False)}
-            if veg_dense:
-                # Dense veg also blocks highways
-                updates[highways] = gr.update(value=False, interactive=False)
-            return updates
-        else:
-            return {
-                coastal: gr.update(interactive=True),
-                highways: gr.update(interactive=True)
-            }
+    # Wire up validation on any change
+    all_inputs = [coastal, veg_sparse, veg_moderate, veg_dense, highways, 
+                  commercial, industrial, density, scene]
     
-    def apply_highway_constraints(highway_enabled):
-        """When highways are selected, disable coastal, dense veg, and high density."""
-        if highway_enabled:
-            return {
-                coastal: gr.update(value=False, interactive=False),
-                veg_dense: gr.update(value=False, interactive=False),
-                commercial: gr.update(value=False, interactive=False),
-                density: gr.update(value="low" if density.value == "high" else density.value)
-            }
-        else:
-            return {
-                coastal: gr.update(interactive=True),
-                veg_dense: gr.update(interactive=True),
-                commercial: gr.update(interactive=True),
-                density: gr.update()
-            }
+    for input_comp in all_inputs:
+        input_comp.change(
+            fn=validate_and_update_quality,
+            inputs=all_inputs,
+            outputs=[quality_indicator, warnings_box, highways]
+        )
     
-    def apply_density_constraints(density_value):
-        """When high density is selected, disable coastal, rural, and sparse veg."""
-        if density_value == "high":
-            return {
-                coastal: gr.update(value=False, interactive=False),
-                highways: gr.update(value=False, interactive=False),
-                veg_sparse: gr.update(value=False, interactive=False),
-                scene: gr.update(value="urban" if scene.value == "rural" else scene.value)
-            }
-        else:
-            return {
-                coastal: gr.update(interactive=True),
-                highways: gr.update(interactive=True),
-                veg_sparse: gr.update(interactive=True),
-                scene: gr.update()
-            }
-    
-    def apply_building_type_constraints(comm, ind):
-        """When commercial/industrial selected, disable coastal only."""
-        if comm or ind:
-            return gr.update(value=False, interactive=False)
-        else:
-            return gr.update(interactive=True)
-    
-    def apply_scene_constraints(scene_value):
-        """When rural/urban selected, apply scene-specific constraints."""
-        if scene_value == "rural":
-            # Rural cannot have high density
-            return {
-                density: gr.update(value="low" if density.value == "high" else density.value)
-            }
-        else:  # urban
-            # Urban cannot have dense vegetation
-            return {
-                veg_dense: gr.update(value=False, interactive=False)
-            }
-    
-    # Wire up ALL constraint listeners
-    coastal.change(
-        fn=apply_coastal_constraints,
-        inputs=[coastal],
-        outputs=[veg_moderate, veg_dense, highways, commercial, industrial, density]
-    )
-    
-    veg_moderate.change(
-        fn=apply_vegetation_constraints,
-        inputs=[veg_moderate, veg_dense],
-        outputs=[coastal, highways]
-    )
-    
-    veg_dense.change(
-        fn=apply_vegetation_constraints,
-        inputs=[veg_moderate, veg_dense],
-        outputs=[coastal, highways]
-    )
-    
-    highways.change(
-        fn=apply_highway_constraints,
-        inputs=[highways],
-        outputs=[coastal, veg_dense, commercial, density]
-    )
-    
-    density.change(
-        fn=apply_density_constraints,
-        inputs=[density],
-        outputs=[coastal, highways, veg_sparse, scene]
-    )
-    
-    commercial.change(
-        fn=apply_building_type_constraints,
-        inputs=[commercial, industrial],
-        outputs=[coastal]
-    )
-    
-    industrial.change(
-        fn=apply_building_type_constraints,
-        inputs=[commercial, industrial],
-        outputs=[coastal]
-    )
-    
-    scene.change(
-        fn=apply_scene_constraints,
-        inputs=[scene],
-        outputs=[density, veg_dense]
-    )
-    
-    # Wire up generation - NEW: Simplified inputs matching training data
+    # Wire up generation
     gen_btn.click(
         fn=generate_dataset,
         inputs=[
