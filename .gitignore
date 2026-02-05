@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated Images
+outputs/
+generated_images/
+dataset/
+*.jpg
+*.jpeg
+*.png
+!aug4sat.png
+
+# Training Data (keep locally, don't push)
+image_descriptions.json
+
+# Test Files (keep locally, don't push)
+test_*.py
+check_*.py
+analyze_*.py
+comprehensive_*.py
+final_*.py
+
+# Internal Documentation (keep locally, don't push)
+ANALYSIS.md
+PROMPT_EXAMPLES.md
+REDESIGN_SUMMARY.md
+ui_redesign_plan.txt
+
+# Logs
+*.log
