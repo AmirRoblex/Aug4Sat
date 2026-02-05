@@ -6,7 +6,6 @@ import gc
 import torch
 import json
 from datetime import datetime
-from tqdm import tqdm
 from PIL import Image
 import warnings
 warnings.filterwarnings('ignore')
@@ -21,7 +20,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 # Global models (loaded on demand)
 sdxl_pipe = None
-prompt_generator = None
+template_generator = None
 
 # ============================================================================
 # MODEL LOADING FUNCTIONS
@@ -68,133 +67,212 @@ def load_sdxl_with_lora():
     yield f"✅ SDXL + LoRA loaded ({mem_allocated:.1f} GB)"
 
 # ============================================================================
-# PROMPT GENERATOR CLASS
+# TEMPLATE VARIANT GENERATOR
 # ============================================================================
 
-class SatellitePromptGenerator:
+import random
+
+class TemplateVariantGenerator:
+    """Generate diverse prompts using template variants and synonym substitution"""
+    
     def __init__(self):
-        self.model = None
-        self.tokenizer = None
-    
-    def load(self):
-        """Load Qwen model"""
-        from transformers import AutoModelForCausalLM, AutoTokenizer
-        
-        self.model = AutoModelForCausalLM.from_pretrained(
-            "Qwen/Qwen2.5-3B-Instruct",
-            torch_dtype=torch.float16,
-            device_map="auto",
-            trust_remote_code=True,
-            low_cpu_mem_usage=True
-        )
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2.5-3B-Instruct",
-            trust_remote_code=True
-        )
-    
-    def unload(self):
-        """Free memory"""
-        if self.model is not None:
-            del self.model
-            del self.tokenizer
-            self.model = None
-            self.tokenizer = None
-        torch.cuda.empty_cache()
-        gc.collect()
-    
-    def generate_single_prompt(self, feature_dict, scene_type, density_bias):
-        """Generate ONE prompt with special vegetation handling"""
-        
-        # Check if vegetation-focused
-        is_vegetation_focused = (
-            feature_dict.get('dense_forest') or 
-            feature_dict.get('sparse_trees') or 
-            feature_dict.get('grassland')
-        ) and scene_type == 'rural-dominant' and density_bias == 'dense'
-        
-        if is_vegetation_focused:
-            # Special vegetation prompt
-            prompt_text = """Generate a satellite image description (3-4 sentences, 50-80 words) for a heavily vegetated rural landscape.
-
-REQUIREMENTS:
-- PRIMARY: Dense vegetation coverage (forests, agricultural fields, grasslands)
-- Scene: Rural/agricultural landscape
-- Density: Dense/thick vegetation
-- AVOID: Urban elements, buildings, paved roads
-
-VOCABULARY: "dense forest canopy", "thick tree coverage", "continuous vegetation", "agricultural fields with mature crops", "grassland", "wooded areas"
-
-EXAMPLE: "Rural landscape with dense forest coverage dominating the terrain. Agricultural fields showing thick crop vegetation interspersed with wooded sections. Continuous tree canopy with sparse clearings and minimal exposed soil throughout."
-
-Generate ONE description:"""
-        else:
-            # Standard prompt
-            features = []
-            if feature_dict.get('coastal_water') or feature_dict.get('rivers') or feature_dict.get('lakes'):
-                features.append("water body")
-            if feature_dict.get('dense_forest') or feature_dict.get('sparse_trees') or feature_dict.get('grassland'):
-                features.append(f"{density_bias} vegetation")
-            if feature_dict.get('paved_roads'):
-                features.append("paved roads")
-            if feature_dict.get('unpaved_roads'):
-                features.append("unpaved roads")
-            if feature_dict.get('residential') or feature_dict.get('commercial') or feature_dict.get('industrial'):
-                features.append(f"{density_bias} building density")
+        # Synonym dictionary from training data
+        self.synonyms = {
+            # Scene types
+            'Coastal urban settlement': ['Coastal urban settlement', 'Coastal settlement', 'Coastal urban zone', 'Semi-arid coastal landscape'],
+            'Urban settlement': ['Urban settlement', 'Urban area', 'Urban core', 'Peri-urban settlement'],
+            'Rural arid landscape': ['Rural arid landscape', 'Rural landscape', 'Arid landscape', 'Rural agricultural area'],
+            'Mixed-use settlement': ['Mixed-use settlement', 'Mixed settlement', 'Mixed-use urban settlement'],
             
-            features_str = ", ".join(features) if features else "bareland"
+            # Density
+            'low building density': ['low building density', 'sparse building density', 'minimal building density'],
+            'moderate building density': ['moderate building density', 'moderate development', 'moderate density'],
+            'high building density': ['high building density', 'dense building density', 'dense development'],
             
-            prompt_text = f"""Generate a satellite image description (2-3 sentences) for:
-- Scene type: {scene_type}
-- Features: {features_str}
-
-Use terminology: "high/moderate/low building density", "sparse/moderate/dense vegetation", "paved/unpaved roads", "bareland", "water body"
-
-Example: "Urban settlement with central vegetated area surrounded by dense buildings. Unpaved roads creating grid pattern. Mixed bareland and moderate vegetation throughout residential zone."
-
-Generate description:"""
+            # Buildings
+            'featuring': ['featuring', 'with', 'including'],
+            'structures': ['structures', 'buildings', 'development'],
+            'isolated structures': ['isolated structures', 'scattered structures', 'dispersed structures'],
+            'tightly packed structures': ['tightly packed structures', 'dense building clusters', 'densely packed buildings'],
+            'clusters of': ['clusters of', 'groups of', 'collections of'],
+            
+            # Roads
+            'Paved roads form grid-like network': ['Paved roads form grid-like network', 'Grid-like paved road network', 'Paved road network forms grid pattern'],
+            'run along the periphery': ['run along the periphery', 'line the edges', 'border the area'],
+            'weave through': ['weave through', 'crisscross through', 'wind through', 'traverse'],
+            'dirt tracks': ['dirt tracks', 'unpaved tracks', 'dirt roads'],
+            
+            # Vegetation
+            'Sparse vegetation': ['Sparse vegetation', 'Scattered vegetation', 'Limited vegetation'],
+            'consisting of': ['consisting of', 'including', 'with'],
+            'scattered shrubs and bushes': ['scattered shrubs and bushes', 'isolated shrubs', 'sparse shrubs'],
+            'across predominantly': ['across predominantly', 'on mostly', 'across primarily'],
+            'bareland': ['bareland', 'bare terrain', 'exposed terrain', 'bare soil'],
+            'interspersed with': ['interspersed with', 'mixed with', 'dotted with', 'scattered among'],
+            'patches': ['patches', 'areas', 'sections'],
+            
+            # Water
+            'adjacent water body': ['adjacent water body', 'nearby water body', 'water body adjacent'],
+            'developed shoreline': ['developed shoreline', 'shoreline development', 'built shoreline']
+        }
         
-        messages = [{"role": "user", "content": prompt_text}]
-        text = self.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        inputs = self.tokenizer(text, return_tensors="pt").to(self.model.device)
+        # Template structures
+        self.templates = {
+            'coastal-moderate': [
+                "{scene} with {density} {buildings}{water}. {roads}. {vegetation}.",
+                "{scene}{water}, with {density} {buildings}. {roads}. {vegetation}.",
+                "{scene} with {density} {buildings} along {roads_short}{water}. {vegetation}.",
+            ],
+            'urban-moderate': [
+                "{scene} with {density}, {buildings}. {roads}. {vegetation}.",
+                "{scene} with {density}. {roads} connect {buildings_short}. {vegetation}.",
+                "{scene} with {density} {buildings}. {roads}. {vegetation}.",
+            ],
+            'rural-sparse': [
+                "{scene} with {density}, {buildings}. {roads}. {vegetation}. {closure}",
+                "{scene} with {density} {buildings} connected by {roads_short}. {vegetation}. {closure}",
+                "{scene} with {buildings} connected by {roads_short}. {vegetation} across predominantly bareland. {closure}",
+            ]
+        }
+    
+    def _substitute(self, text):
+        """Replace phrases with synonyms"""
+        phrases = sorted(self.synonyms.keys(), key=len, reverse=True)
         
-        output = self.model.generate(
-            **inputs,
-            max_new_tokens=150,
-            do_sample=True,
-            temperature=0.9,
-            top_p=0.95,
-            pad_token_id=self.tokenizer.eos_token_id
-        )
+        for phrase in phrases:
+            if phrase in text:
+                replacement = random.choice(self.synonyms[phrase])
+                text = text.replace(phrase, replacement, 1)
         
-        generated = self.tokenizer.decode(output[0], skip_special_tokens=True)
+        return text
+    
+    def _get_scene_phrase(self, scene_type):
+        mapping = {
+            'coastal-focused': 'Coastal urban settlement',
+            'urban-heavy': 'Urban settlement',
+            'rural-dominant': 'Rural arid landscape',
+            'balanced': 'Mixed-use settlement'
+        }
+        return mapping.get(scene_type, 'Settlement')
+    
+    def _get_density_phrase(self, density_bias):
+        mapping = {
+            'sparse': 'low building density',
+            'moderate': 'moderate building density',
+            'dense': 'high building density',
+            'mixed': 'varied building density'
+        }
+        return mapping.get(density_bias, 'moderate building density')
+    
+    def _get_building_phrase(self, features, density_bias):
+        has_buildings = any([features.get('residential'), features.get('commercial'), features.get('industrial')])
         
-        # Extract description
-        parts = generated.split("Generate description:")
-        if len(parts) > 1:
-            description = parts[-1].strip()
+        if not has_buildings:
+            return None
+        
+        if density_bias == 'sparse':
+            return "featuring isolated structures and dispersed development"
+        elif density_bias == 'dense':
+            if features.get('industrial'):
+                return "featuring dense building clusters and industrial facilities"
+            else:
+                return "featuring tightly packed structures"
         else:
-            description = generated.split('\n')[-1].strip()
+            types = []
+            if features.get('residential'): types.append("residential")
+            if features.get('commercial'): types.append("commercial")
+            if features.get('industrial'): types.append("industrial")
+            
+            if len(types) > 1:
+                return f"featuring clusters of {' and '.join(types)} structures"
+            else:
+                return "featuring moderate development"
+    
+    def _get_road_phrase(self, features):
+        has_paved = features.get('paved_roads') or features.get('highways')
+        has_unpaved = features.get('unpaved_roads')
+        
+        if has_paved and has_unpaved:
+            return "Paved roads run along the periphery while unpaved dirt tracks weave through the interior"
+        elif has_paved:
+            if features.get('highways'):
+                return "Paved road network forms grid pattern with major highways"
+            else:
+                return "Paved roads form grid-like network connecting neighborhoods"
+        elif has_unpaved:
+            return "Unpaved tracks and dirt roads crisscross through the area"
+        return None
+    
+    def _get_vegetation_phrase(self, features, density_bias):
+        has_dense = features.get('dense_forest')
+        has_sparse = features.get('sparse_trees') or features.get('grassland')
+        
+        if has_dense:
+            return "Dense vegetation consisting of thick forest coverage and agricultural fields"
+        elif has_sparse:
+            if density_bias == 'sparse':
+                return "Sparse vegetation consisting of scattered shrubs and bushes across predominantly bareland"
+            else:
+                return "Sparse vegetation patches interspersed with bareland"
+        else:
+            return "Minimal vegetation, predominantly bareland"
+    
+    def _get_water_phrase(self, features):
+        if features.get('coastal_water'):
+            return "adjacent water body with developed shoreline"
+        elif features.get('rivers') or features.get('lakes'):
+            return "with visible water bodies throughout the terrain"
+        return None
+    
+    def _select_template_category(self, scene_type, density_bias):
+        """Choose appropriate template category"""
+        if 'coastal' in scene_type and density_bias in ['moderate', 'dense']:
+            return 'coastal-moderate'
+        elif 'urban' in scene_type:
+            return 'urban-moderate'
+        elif 'rural' in scene_type and density_bias == 'sparse':
+            return 'rural-sparse'
+        else:
+            return 'urban-moderate'
+    
+    def _fill_template(self, template, features, scene_type, density_bias):
+        """Fill template with feature descriptions"""
+        replacements = {
+            '{scene}': self._get_scene_phrase(scene_type),
+            '{density}': self._get_density_phrase(density_bias),
+            '{buildings}': self._get_building_phrase(features, density_bias) or "featuring minimal development",
+            '{buildings_short}': "neighborhoods" if features.get('residential') else "structures",
+            '{roads}': self._get_road_phrase(features) or "Dirt tracks traverse the area",
+            '{roads_short}': "paved roads" if features.get('paved_roads') else "unpaved tracks",
+            '{vegetation}': self._get_vegetation_phrase(features, density_bias) or "Minimal vegetation",
+            '{water}': f", {self._get_water_phrase(features)}" if self._get_water_phrase(features) else "",
+            '{closure}': "No visible water bodies; development is minimal and dispersed" if not features.get('coastal_water') and scene_type == 'rural-dominant' else ""
+        }
+        
+        result = template
+        for key, value in replacements.items():
+            result = result.replace(key, value)
         
         # Clean up
-        description = description.replace('"', '').replace("'", "").strip()
+        result = result.replace("  ", " ").replace(" .", ".").replace("..", ".").strip()
         
-        return description
+        return result
     
-    def generate_prompts(self, feature_dict, num_prompts, scene_type, density_bias):
-        """Generate prompts one by one"""
-        if self.model is None:
-            self.load()
+    def generate(self, features, scene_type, density_bias):
+        """Generate a single prompt with template variants and synonyms"""
+        # Select template category
+        category = self._select_template_category(scene_type, density_bias)
         
-        prompts = []
-        for i in range(num_prompts):
-            try:
-                prompt = self.generate_single_prompt(feature_dict, scene_type, density_bias)
-                prompts.append(prompt)
-            except Exception as e:
-                # Fallback
-                prompts.append(f"{scene_type} scene with {density_bias} features including typical landscape elements.")
+        # Pick random template
+        template = random.choice(self.templates[category])
         
-        return prompts
+        # Fill template
+        filled = self._fill_template(template, features, scene_type, density_bias)
+        
+        # Apply synonym substitution
+        varied = self._substitute(filled)
+        
+        return varied
 
 # ============================================================================
 # MAIN GENERATION FUNCTION
@@ -226,13 +304,13 @@ def generate_dataset(
                 yield status, ""
         
         # ====================================================================
-        # STEP 2: GENERATE PROMPTS WITH QWEN
+        # STEP 2: GENERATE PROMPTS
         # ====================================================================
         
-        yield "📝 Loading Qwen for prompt generation...", ""
+        global template_generator
         
-        if prompt_generator is None:
-            prompt_generator = SatellitePromptGenerator()
+        if template_generator is None:
+            template_generator = TemplateVariantGenerator()
         
         # Build feature dictionary
         feature_dict = {
@@ -254,28 +332,18 @@ def generate_dataset(
         
         yield f"📝 Generating {count} prompts...", ""
         
-        prompts = prompt_generator.generate_prompts(
-            feature_dict=feature_dict,
-            num_prompts=int(count),
-            scene_type=scene,
-            density_bias=density
-        )
+        # Generate prompts
+        prompts = []
+        for i in range(int(count)):
+            prompt = template_generator.generate(feature_dict, scene, density)
+            prompts.append(prompt)
         
         # Show sample prompts
         sample_text = "\n".join([f"  {i+1}. {p[:70]}..." for i, p in enumerate(prompts[:3])])
         yield f"✅ Generated {len(prompts)} prompts\n\nSample prompts:\n{sample_text}", ""
         
         # ====================================================================
-        # STEP 3: UNLOAD QWEN
-        # ====================================================================
-        
-        yield "🧹 Unloading Qwen to free memory...", ""
-        prompt_generator.unload()
-        torch.cuda.empty_cache()
-        gc.collect()
-        
-        # ====================================================================
-        # STEP 4: GENERATE IMAGES WITH SDXL + LORA
+        # STEP 3: GENERATE IMAGES WITH SDXL + LORA
         # ====================================================================
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -563,7 +631,6 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 height = gr.Radio([768, 1024], value=1024, label="Height")
             
             gr.Markdown("### Advanced Settings")
-            gr.Markdown("⚠️ **Warning:** Only modify if you understand prompt engineering")
             
             neg_prompt = gr.Textbox(
                 label="Negative Prompt",
