@@ -748,7 +748,7 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 industrial = gr.Checkbox(label="Industrial")
                 gr.Markdown("""
                 <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
-                    ⚠️ <strong>Constraint:</strong> Commercial/Industrial buildings cannot be combined with coastal water or rural scenes (0% in training data).
+                    ⚠️ <strong>Constraint:</strong> Commercial/Industrial buildings cannot be combined with coastal water (0% in training data).
                 </div>
                 """)
         
@@ -895,33 +895,23 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             }
     
     def apply_building_type_constraints(comm, ind):
-        """When commercial/industrial selected, disable coastal and rural."""
+        """When commercial/industrial selected, disable coastal only."""
         if comm or ind:
-            return {
-                coastal: gr.update(value=False, interactive=False),
-                scene: gr.update(value="urban" if scene.value == "rural" else scene.value)
-            }
+            return gr.update(value=False, interactive=False)
         else:
-            return {
-                coastal: gr.update(interactive=True),
-                scene: gr.update()
-            }
+            return gr.update(interactive=True)
     
     def apply_scene_constraints(scene_value):
         """When rural/urban selected, apply scene-specific constraints."""
         if scene_value == "rural":
-            # Rural cannot have high density, commercial, or industrial
+            # Rural cannot have high density
             return {
-                density: gr.update(value="low" if density.value == "high" else density.value),
-                commercial: gr.update(value=False, interactive=False),
-                industrial: gr.update(value=False, interactive=False)
+                density: gr.update(value="low" if density.value == "high" else density.value)
             }
         else:  # urban
             # Urban cannot have dense vegetation
             return {
-                veg_dense: gr.update(value=False, interactive=False),
-                commercial: gr.update(interactive=True),
-                industrial: gr.update(interactive=True)
+                veg_dense: gr.update(value=False, interactive=False)
             }
     
     # Wire up ALL constraint listeners
@@ -958,19 +948,19 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
     commercial.change(
         fn=apply_building_type_constraints,
         inputs=[commercial, industrial],
-        outputs=[coastal, scene]
+        outputs=[coastal]
     )
     
     industrial.change(
         fn=apply_building_type_constraints,
         inputs=[commercial, industrial],
-        outputs=[coastal, scene]
+        outputs=[coastal]
     )
     
     scene.change(
         fn=apply_scene_constraints,
         inputs=[scene],
-        outputs=[density, commercial, industrial, veg_dense]
+        outputs=[density, veg_dense]
     )
     
     # Wire up generation - NEW: Simplified inputs matching training data
