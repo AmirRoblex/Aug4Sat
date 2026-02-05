@@ -704,6 +704,11 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             gr.Markdown("### Water Bodies")
             with gr.Group():
                 coastal = gr.Checkbox(label="Coastal Water", value=True)
+                gr.Markdown("""
+                <div style='background: #eff6ff; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #1e40af;'>
+                    💡 <strong>Note:</strong> Coastal water requires sparse vegetation only (no moderate/dense) and no highways, based on training data patterns.
+                </div>
+                """)
                 # Hidden - not in training data
                 rivers = gr.Checkbox(visible=False)
                 lakes = gr.Checkbox(visible=False)
@@ -714,6 +719,11 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 veg_sparse = gr.Checkbox(label="Sparse (scattered shrubs)", value=True)
                 veg_moderate = gr.Checkbox(label="Moderate (patches of trees)")
                 veg_dense = gr.Checkbox(label="Dense (forests/agriculture)")
+                gr.Markdown("""
+                <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
+                    ⚠️ <strong>Constraint:</strong> Moderate/Dense vegetation cannot be combined with coastal water (incompatible with training data).
+                </div>
+                """)
                 # Hidden - simplified from original
                 forest = gr.Checkbox(visible=False)
                 sparse_trees = gr.Checkbox(visible=False)
@@ -725,6 +735,11 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 paved = gr.Checkbox(label="Paved Roads", value=True)
                 unpaved = gr.Checkbox(label="Unpaved/Dirt Roads", value=True)
                 highways = gr.Checkbox(label="Highways")
+                gr.Markdown("""
+                <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
+                    ⚠️ <strong>Constraint:</strong> Highways cannot be combined with coastal water (not present in training data).
+                </div>
+                """)
             
             gr.Markdown("### Buildings")
             with gr.Group():
@@ -789,6 +804,70 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
         <a href="https://github.com/AmirRoblex/Aug4Sat" target="_blank">GitHub</a>
     </div>
     """)
+    
+    # ========================================================================
+    # CONSTRAINT LOGIC - Based on Training Data Analysis
+    # ========================================================================
+    # Rule 1: Coastal Water → Only Sparse Vegetation (never moderate/dense)
+    # Rule 2: Coastal Water → Never Highways
+    # Rule 3: Dense/Moderate Vegetation → Never Coastal Water
+    # Rule 4: Highways → Never Coastal Water
+    
+    def apply_coastal_constraints(coastal_enabled):
+        """When coastal water is selected, disable incompatible options."""
+        if coastal_enabled:
+            # Coastal ONLY works with sparse vegetation
+            return {
+                veg_moderate: gr.update(value=False, interactive=False),
+                veg_dense: gr.update(value=False, interactive=False),
+                highways: gr.update(value=False, interactive=False)
+            }
+        else:
+            # Enable all options when coastal is disabled
+            return {
+                veg_moderate: gr.update(interactive=True),
+                veg_dense: gr.update(interactive=True),
+                highways: gr.update(interactive=True)
+            }
+    
+    def apply_vegetation_constraints(veg_mod, veg_dense):
+        """When moderate/dense vegetation is selected, disable coastal water."""
+        if veg_mod or veg_dense:
+            return gr.update(value=False, interactive=False)
+        else:
+            return gr.update(interactive=True)
+    
+    def apply_highway_constraints(highway_enabled):
+        """When highways are selected, disable coastal water."""
+        if highway_enabled:
+            return gr.update(value=False, interactive=False)
+        else:
+            return gr.update(interactive=True)
+    
+    # Wire up constraint listeners
+    coastal.change(
+        fn=apply_coastal_constraints,
+        inputs=[coastal],
+        outputs=[veg_moderate, veg_dense, highways]
+    )
+    
+    veg_moderate.change(
+        fn=apply_vegetation_constraints,
+        inputs=[veg_moderate, veg_dense],
+        outputs=[coastal]
+    )
+    
+    veg_dense.change(
+        fn=apply_vegetation_constraints,
+        inputs=[veg_moderate, veg_dense],
+        outputs=[coastal]
+    )
+    
+    highways.change(
+        fn=apply_highway_constraints,
+        inputs=[highways],
+        outputs=[coastal]
+    )
     
     # Wire up generation - NEW: Simplified inputs matching training data
     gen_btn.click(
