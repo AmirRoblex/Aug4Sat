@@ -737,7 +737,7 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 highways = gr.Checkbox(label="Highways")
                 gr.Markdown("""
                 <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
-                    ⚠️ <strong>Constraint:</strong> Highways cannot be combined with coastal water (not present in training data).
+                    ⚠️ <strong>Constraint:</strong> Highways cannot be combined with coastal water, dense vegetation, or high density (0% in training data).
                 </div>
                 """)
             
@@ -746,6 +746,11 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 residential = gr.Checkbox(label="Residential", value=True)
                 commercial = gr.Checkbox(label="Commercial")
                 industrial = gr.Checkbox(label="Industrial")
+                gr.Markdown("""
+                <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
+                    ⚠️ <strong>Constraint:</strong> Commercial/Industrial buildings cannot be combined with coastal water or rural scenes (0% in training data).
+                </div>
+                """)
         
         # Right Column - Settings
         with gr.Column(scale=1):
@@ -771,6 +776,11 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
                 value="moderate",
                 label="Building Density"
             )
+            gr.Markdown("""
+            <div style='background: #fef3c7; padding: 8px; border-radius: 4px; margin-top: 8px; font-size: 0.85rem; color: #92400e;'>
+                ⚠️ <strong>Constraint:</strong> High density cannot be combined with coastal water, rural scenes, or sparse vegetation (0% in training data).
+            </div>
+            """)
             
             height = gr.Radio([768, 1024], value=1024, label="Image Size")
             
@@ -808,65 +818,159 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
     # ========================================================================
     # CONSTRAINT LOGIC - Based on Training Data Analysis
     # ========================================================================
-    # Rule 1: Coastal Water → Only Sparse Vegetation (never moderate/dense)
-    # Rule 2: Coastal Water → Never Highways
-    # Rule 3: Dense/Moderate Vegetation → Never Coastal Water
-    # Rule 4: Highways → Never Coastal Water
+    # Comprehensive rules extracted from comprehensive_rules.py analysis:
+    # - Coastal: 3/10 (30%), Sparse veg: 10/10 (100%), Dense veg: 0/10 (0%)
+    # - Highways: 0/10 (0%), High density: 0/10 (0%)
+    # - Commercial: 0/10 (0%), Industrial: 0/10 (0%)
     
     def apply_coastal_constraints(coastal_enabled):
-        """When coastal water is selected, disable incompatible options."""
+        """When coastal water is selected, disable ALL incompatible options."""
         if coastal_enabled:
-            # Coastal ONLY works with sparse vegetation
             return {
                 veg_moderate: gr.update(value=False, interactive=False),
                 veg_dense: gr.update(value=False, interactive=False),
-                highways: gr.update(value=False, interactive=False)
+                highways: gr.update(value=False, interactive=False),
+                commercial: gr.update(value=False, interactive=False),
+                industrial: gr.update(value=False, interactive=False),
+                density: gr.update(value="low" if density.value == "high" else density.value)
             }
         else:
-            # Enable all options when coastal is disabled
             return {
                 veg_moderate: gr.update(interactive=True),
                 veg_dense: gr.update(interactive=True),
-                highways: gr.update(interactive=True)
+                highways: gr.update(interactive=True),
+                commercial: gr.update(interactive=True),
+                industrial: gr.update(interactive=True),
+                density: gr.update()
             }
     
     def apply_vegetation_constraints(veg_mod, veg_dense):
         """When moderate/dense vegetation is selected, disable coastal water."""
+        # Moderate veg: very rare with coastal (1/10)
+        # Dense veg: NEVER with coastal, urban, or highways (0/10)
         if veg_mod or veg_dense:
-            return gr.update(value=False, interactive=False)
+            updates = {coastal: gr.update(value=False, interactive=False)}
+            if veg_dense:
+                # Dense veg also blocks highways
+                updates[highways] = gr.update(value=False, interactive=False)
+            return updates
         else:
-            return gr.update(interactive=True)
+            return {
+                coastal: gr.update(interactive=True),
+                highways: gr.update(interactive=True)
+            }
     
     def apply_highway_constraints(highway_enabled):
-        """When highways are selected, disable coastal water."""
+        """When highways are selected, disable coastal, dense veg, and high density."""
         if highway_enabled:
-            return gr.update(value=False, interactive=False)
+            return {
+                coastal: gr.update(value=False, interactive=False),
+                veg_dense: gr.update(value=False, interactive=False),
+                commercial: gr.update(value=False, interactive=False),
+                density: gr.update(value="low" if density.value == "high" else density.value)
+            }
         else:
-            return gr.update(interactive=True)
+            return {
+                coastal: gr.update(interactive=True),
+                veg_dense: gr.update(interactive=True),
+                commercial: gr.update(interactive=True),
+                density: gr.update()
+            }
     
-    # Wire up constraint listeners
+    def apply_density_constraints(density_value):
+        """When high density is selected, disable coastal, rural, and sparse veg."""
+        if density_value == "high":
+            return {
+                coastal: gr.update(value=False, interactive=False),
+                highways: gr.update(value=False, interactive=False),
+                veg_sparse: gr.update(value=False, interactive=False),
+                scene: gr.update(value="urban" if scene.value == "rural" else scene.value)
+            }
+        else:
+            return {
+                coastal: gr.update(interactive=True),
+                highways: gr.update(interactive=True),
+                veg_sparse: gr.update(interactive=True),
+                scene: gr.update()
+            }
+    
+    def apply_building_type_constraints(comm, ind):
+        """When commercial/industrial selected, disable coastal and rural."""
+        if comm or ind:
+            return {
+                coastal: gr.update(value=False, interactive=False),
+                scene: gr.update(value="urban" if scene.value == "rural" else scene.value)
+            }
+        else:
+            return {
+                coastal: gr.update(interactive=True),
+                scene: gr.update()
+            }
+    
+    def apply_scene_constraints(scene_value):
+        """When rural/urban selected, apply scene-specific constraints."""
+        if scene_value == "rural":
+            # Rural cannot have high density, commercial, or industrial
+            return {
+                density: gr.update(value="low" if density.value == "high" else density.value),
+                commercial: gr.update(value=False, interactive=False),
+                industrial: gr.update(value=False, interactive=False)
+            }
+        else:  # urban
+            # Urban cannot have dense vegetation
+            return {
+                veg_dense: gr.update(value=False, interactive=False),
+                commercial: gr.update(interactive=True),
+                industrial: gr.update(interactive=True)
+            }
+    
+    # Wire up ALL constraint listeners
     coastal.change(
         fn=apply_coastal_constraints,
         inputs=[coastal],
-        outputs=[veg_moderate, veg_dense, highways]
+        outputs=[veg_moderate, veg_dense, highways, commercial, industrial, density]
     )
     
     veg_moderate.change(
         fn=apply_vegetation_constraints,
         inputs=[veg_moderate, veg_dense],
-        outputs=[coastal]
+        outputs=[coastal, highways]
     )
     
     veg_dense.change(
         fn=apply_vegetation_constraints,
         inputs=[veg_moderate, veg_dense],
-        outputs=[coastal]
+        outputs=[coastal, highways]
     )
     
     highways.change(
         fn=apply_highway_constraints,
         inputs=[highways],
-        outputs=[coastal]
+        outputs=[coastal, veg_dense, commercial, density]
+    )
+    
+    density.change(
+        fn=apply_density_constraints,
+        inputs=[density],
+        outputs=[coastal, highways, veg_sparse, scene]
+    )
+    
+    commercial.change(
+        fn=apply_building_type_constraints,
+        inputs=[commercial, industrial],
+        outputs=[coastal, scene]
+    )
+    
+    industrial.change(
+        fn=apply_building_type_constraints,
+        inputs=[commercial, industrial],
+        outputs=[coastal, scene]
+    )
+    
+    scene.change(
+        fn=apply_scene_constraints,
+        inputs=[scene],
+        outputs=[density, commercial, industrial, veg_dense]
     )
     
     # Wire up generation - NEW: Simplified inputs matching training data
