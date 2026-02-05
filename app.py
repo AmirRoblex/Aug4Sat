@@ -292,7 +292,7 @@ def generate_dataset(
 ):
     """Main generation function - yields status updates"""
     
-    global sdxl_pipe, prompt_generator
+    global sdxl_pipe, template_generator
     
     try:
         # ====================================================================
