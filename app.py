@@ -300,8 +300,7 @@ class TemplateVariantGenerator:
             vegetation=vegetation,
             veg_detail=veg_detail,
             terrain=terrain,
-            building_location=water_components.get('building_location', 'structures'),
-            **water_components
+            **water_components  # Includes building_location
         )
         
         # Apply synonym substitution for additional diversity
