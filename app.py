@@ -119,23 +119,28 @@ class TemplateVariantGenerator:
             'No visible water bodies': ['No visible water bodies', 'No water bodies are visible', 'with no visible water bodies']
         }
         
-        # Template structures using ACTUAL training data sentence patterns
+        # Template structures - 2-3 SENTENCES matching actual training prompt structure
         self.templates = {
             'rural-sparse': [
-                "{scene} with {density} and {buildings}. {roads} {road_action} the {building_location}. {vegetation} consisting of {veg_detail} on {terrain}.",
-                "{scene} with {density}, featuring {buildings}. {roads} connect the {building_location}, with {vegetation} on {terrain}.",
-                "{scene} in an arid landscape with {density} and {buildings}. {roads} {road_action} through the area. {vegetation} {veg_detail} {terrain}.{water_note}",
-                "Arid rural settlement with {density} and {buildings}. {roads} traverse the terrain, with {vegetation} on {terrain}.{water_note}",
+                # Pattern: Scene + feature. Infrastructure. Vegetation/terrain.
+                "{scene} with {buildings}{water_s1}. {roads} {road_action} the area. {veg_terrain}",
+                "{scene} with {density} and {buildings}{water_s1}. {roads} visible throughout terrain. {veg_terrain}",
+                "Arid landscape with {buildings} and {roads_lower}{water_s1}. {veg_terrain} Minimal development with scattered structures.",
+                "{scene} with {buildings} connected by {roads_lower}{water_s1}. {veg_terrain} {density} throughout rural zone.",
             ],
             'urban-moderate': [
-                "{scene} with {density}, featuring {buildings}. {roads} {road_action} {building_location}. {vegetation} {veg_detail} {terrain}.{water_note}",
-                "{scene} with {density} and {buildings}. {roads} form a grid throughout the area. {vegetation} interspersed with {terrain}.{water_note}",
-                "Urban settlement with {density}, featuring {buildings}. {roads} {road_action} through the area. {vegetation} scattered among {terrain}.{water_note}",
+                # Pattern: Scene + development. Roads/buildings. Vegetation/terrain.
+                "{scene} with {density} featuring {buildings}{water_s1}. {roads} creating grid pattern. {veg_terrain}",
+                "{scene} with {density} and {buildings}{water_s1}. {roads} visible throughout area. Mixed {terrain} and {veg_lower}.",
+                "Urban area with {buildings} and {density}{water_s1}. {roads} {road_action} residential zone. {veg_terrain}",
+                "{scene} with {density}{water_s1}. {buildings} and {roads_lower} throughout settlement. {veg_terrain}",
             ],
             'coastal': [
-                "Coastal scene with a water body adjacent to {shoreline_desc}. {density} with {buildings} along the {shore_position}. {roads} {road_action} {building_location}. {vegetation} on {terrain}.",
-                "Coastal scene {water_position} a developed shoreline. {density} featuring {buildings}. {roads} visible along the coast. {vegetation} {veg_detail} {terrain}.",
-                "Coastal urban settlement with {density} and {buildings} near the shoreline. {roads} form a network through the area. {vegetation} on surrounding {terrain}.",
+                # Pattern: Coastal scene with water. Buildings/roads along shoreline. Vegetation.
+                "Coastal scene with water body adjacent to {shoreline_desc}. {buildings} and {roads_lower} visible along shoreline. {veg_terrain_coastal}",
+                "Coastal scene with water body along developed {shore_position}. {density} with {buildings} near water. {roads} visible throughout area. {veg_terrain_coastal}",
+                "Coastal urban settlement adjacent to water body. {buildings} and {roads_lower} along {shore_position}. {veg_terrain_coastal}",
+                "Coastal scene with water body {water_position} urban area. {density} featuring {buildings}. {roads} visible along coast. {veg_terrain_coastal}",
             ]
         }
     
@@ -231,31 +236,55 @@ class TemplateVariantGenerator:
             return random.choice(self.synonyms['bare, sandy terrain'])
     
     def _build_water_components(self, has_coastal, has_small):
-        """Build water-related phrases"""
+        """Build water-related phrases - integrated into FIRST sentence"""
         if has_coastal:
             return {
-                'water_position': random.choice(['with', 'near', 'adjacent to']),
-                'shoreline_desc': 'a developed shoreline',
+                'water_position': random.choice(['adjacent to', 'near']),
+                'shoreline_desc': 'developed shoreline',
                 'shore_position': random.choice(self.synonyms['shoreline']),
-                'water_note': '',
-                'building_location': 'coastal structures'
+                'water_s1': '',  # Coastal templates already have "with water body"
             }
         elif has_small:
+            # Small water goes in sentence 1 as scene-defining feature
             return {
-                'water_note': ' A small water body is visible in the area.',
+                'water_s1': ' with water body visible',
                 'water_position': '',
                 'shoreline_desc': '',
                 'shore_position': '',
-                'building_location': 'structures'
             }
         else:
             return {
-                'water_note': f" {random.choice(self.synonyms['No visible water bodies'])}.",
+                'water_s1': '',  # No water mention
                 'water_position': '',
                 'shoreline_desc': '',
                 'shore_position': '',
-                'building_location': 'structures'
             }
+    
+    def _build_veg_terrain_phrase(self, veg_level, is_coastal=False):
+        """Build combined vegetation + terrain phrase (Sentence 3 style)"""
+        if is_coastal:
+            # Coastal: "Minimal vegetation with predominantly water and built environment"
+            if veg_level == 'dense':
+                return "Moderate vegetation with predominantly water and built environment"
+            elif veg_level == 'moderate':
+                return f"{random.choice(self.synonyms['Moderate vegetation'])} with water and developed area"
+            else:
+                return "Minimal vegetation with predominantly water and built environment"
+        else:
+            # Rural/Urban: "Sparse vegetation on bareland"
+            if veg_level == 'dense':
+                return f"{random.choice(self.synonyms['Dense vegetation'])} throughout area"
+            elif veg_level == 'moderate':
+                veg = random.choice(self.synonyms['Moderate vegetation'])
+                terrain = random.choice(self.synonyms['bare, sandy terrain'])
+                return f"{veg} on {terrain}"
+            elif veg_level == 'sparse':
+                veg = random.choice(self.synonyms['Sparse vegetation'])
+                detail = random.choice(self.synonyms['scattered shrubs and bushes'])
+                terrain = random.choice(self.synonyms['predominantly bareland'])
+                return f"{veg} consisting of {detail} on {terrain}"
+            else:
+                return f"Minimal vegetation on {random.choice(self.synonyms['predominantly bareland'])}"
     
     def generate(self, features):
         """Generate diverse prompts using actual training data vocabulary
@@ -283,24 +312,59 @@ class TemplateVariantGenerator:
         roads = self._build_roads_phrase(features.get('paved_roads', False), features.get('unpaved_roads', False))
         road_action = self._build_road_action(features.get('paved_roads', False))
         vegetation = self._build_vegetation_phrase(features.get('veg_level'))
-        veg_detail = self._build_veg_detail(features.get('veg_level'))
+    def generate(self, features):
+        """Generate diverse prompts using actual training data structure (2-3 sentences)
+        
+        Args:
+            features: dict with keys:
+                - scene: 'rural' or 'urban'
+                - density: 'low', 'moderate', 'high'
+                - coastal_water: bool
+                - small_water: bool
+                - veg_level: 'sparse', 'moderate', 'dense', or None
+                - paved_roads: bool
+                - unpaved_roads: bool
+        """
+        # Determine template type
+        scene_type = self._get_scene_type(features['scene'], features.get('coastal_water', False))
+        is_coastal = scene_type == 'coastal'
+        
+        # Select random template
+        template = random.choice(self.templates[scene_type])
+        
+        # Build all components
+        scene = self._build_scene_phrase(features['scene'])
+        density = self._build_density_phrase(features.get('density', 'moderate'))
+        buildings = self._build_buildings_phrase(features.get('density', 'moderate'))
+        roads = self._build_roads_phrase(features.get('paved_roads', False), features.get('unpaved_roads', False))
+        roads_lower = roads.lower()
+        road_action = self._build_road_action(features.get('paved_roads', False))
+        veg_lower = self._build_vegetation_phrase(features.get('veg_level')).lower()
         terrain = self._build_terrain_phrase(features.get('veg_level'))
+        
+        # Build combined vegetation + terrain phrase (sentence 3)
+        veg_terrain = self._build_veg_terrain_phrase(features.get('veg_level'), is_coastal)
+        veg_terrain_coastal = veg_terrain  # Same for coastal
+        
+        # Water components (integrated into sentence 1)
         water_components = self._build_water_components(
             features.get('coastal_water', False),
             features.get('small_water', False)
         )
         
-        # Fill template with components
+        # Fill template with all components
         prompt = template.format(
             scene=scene,
             density=density,
             buildings=buildings,
             roads=roads,
+            roads_lower=roads_lower,
             road_action=road_action,
-            vegetation=vegetation,
-            veg_detail=veg_detail,
+            veg_lower=veg_lower,
             terrain=terrain,
-            **water_components  # Includes building_location
+            veg_terrain=veg_terrain,
+            veg_terrain_coastal=veg_terrain_coastal,
+            **water_components
         )
         
         # Apply synonym substitution for additional diversity
