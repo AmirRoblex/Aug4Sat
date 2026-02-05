@@ -55,10 +55,12 @@ python app.py
 
 ## Technical Stack
 
-- SDXL (Stable Diffusion XL) with custom LoRA
-- Qwen 2.5-3B for prompt generation
+- SDXL (Stable Diffusion XL) with custom LoRA for image generation
+- Template-based prompt generation with synonym substitution for diversity
 - Gradio for web interface
 - PyTorch for GPU acceleration
+
+**Note:** Previously used Qwen 2.5-3B for prompt generation, but replaced with deterministic template-based system for faster generation, reduced memory usage, and elimination of LLM dependency.
 
 ## Author
 
