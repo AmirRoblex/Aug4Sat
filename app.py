@@ -577,24 +577,28 @@ with gr.Blocks(css=css, title="Aug4Sat", theme=gr.themes.Default()) as demo:
             
             gr.Markdown("### Water Bodies")
             with gr.Group():
-                coastal = gr.Checkbox(label="Coastal Waters", value=True)
-                # Note: Only coastal water is available (trained in LoRA dataset)
-                # Rivers, lakes, ponds were not in training data
+                coastal = gr.Checkbox(label="Coastal Water", value=True)
+                small_water = gr.Checkbox(label="Small Water Bodies (ponds/channels)")
+                # Hidden - not in training data
                 rivers = gr.Checkbox(visible=False)
                 lakes = gr.Checkbox(visible=False)
                 ponds = gr.Checkbox(visible=False)
             
-            gr.Markdown("### Vegetation")
+            gr.Markdown("### Vegetation Coverage")
             with gr.Group():
-                forest = gr.Checkbox(label="Dense Forest")
-                sparse_trees = gr.Checkbox(label="Sparse Trees", value=True)
-                grass = gr.Checkbox(label="Grassland", value=True)
-                ag_fields = gr.Checkbox(label="Agricultural Fields")
+                veg_sparse = gr.Checkbox(label="Sparse (scattered shrubs)", value=True)
+                veg_moderate = gr.Checkbox(label="Moderate (patches of trees)")
+                veg_dense = gr.Checkbox(label="Dense (forests/agriculture)")
+                # Hidden - simplified from original
+                forest = gr.Checkbox(visible=False)
+                sparse_trees = gr.Checkbox(visible=False)
+                grass = gr.Checkbox(visible=False)
+                ag_fields = gr.Checkbox(visible=False)
             
             gr.Markdown("### Roads & Infrastructure")
             with gr.Group():
                 paved = gr.Checkbox(label="Paved Roads", value=True)
-                unpaved = gr.Checkbox(label="Unpaved Roads", value=True)
+                unpaved = gr.Checkbox(label="Unpaved/Dirt Roads", value=True)
                 highways = gr.Checkbox(label="Highways")
             
             gr.Markdown("### Buildings")
